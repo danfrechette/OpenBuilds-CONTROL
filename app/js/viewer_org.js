@@ -1,6 +1,6 @@
 // Global Vars
 var scene = true;
-var camera, cameraXY, cameraZ, renderer;
+var camera, renderer;
 var projector, mouseVector, containerWidth, containerHeight;
 var raycaster = new THREE.Raycaster();
 var gridsystem = new THREE.Group();
@@ -10,12 +10,6 @@ var camera, controls, control, scene, renderer, gridsystem, helper;
 var clock = new THREE.Clock();
 
 var marker;
-
-// Split-view coordinate picker state.
-var coordinatePickEnabled = false;
-var coordinatePickButton;
-var coordinatePickMarker;
-var coordinateReadout;
 var sizexmax;
 var sizeymax;
 var lineincrement = 50
@@ -328,17 +322,8 @@ function init3D() {
     });
     // ThreeJS Render/Control/Camera
     scene = new THREE.Scene();
-    // The original camera remains the navigation camera used by OrbitControls.
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
     camera.position.z = 295;
-
-    // Display cameras used by the two side-by-side viewports.
-    cameraXY = new THREE.PerspectiveCamera(45, 1, 1, 20000);
-    cameraXY.up.set(0, 1, 0);
-
-    // Fixed XZ depth view. This camera is display-only.
-    cameraZ = new THREE.PerspectiveCamera(45, 1, 1, 20000);
-    cameraZ.up.set(0, 0, 1);
 
     $('#renderArea').append(renderer.domElement);
     renderer.setClearColor(0xffffff, 1); // Background color of viewer = transparent
@@ -347,10 +332,9 @@ function init3D() {
 
     sceneWidth = document.getElementById("renderArea").offsetWidth,
       sceneHeight = document.getElementById("renderArea").offsetHeight;
-    camera.aspect = (sceneWidth / 2) / sceneHeight;
+    camera.aspect = sceneWidth / sceneHeight;
     renderer.setSize(sceneWidth, sceneHeight)
     camera.updateProjectionMatrix();
-    updateSplitCameraAspect(sceneWidth, sceneHeight);
 
 
     if (!disable3Dcontrols) {
@@ -370,11 +354,6 @@ function init3D() {
       controls.enableKeys = false; // Disable Keyboard on canvas
     }
 
-
-    // Add the one-shot coordinate-picking button and prevent the fixed
-    // depth viewport from forwarding input to OrbitControls.
-    createCoordinatePickerUI();
-    installSplitViewInputGuard();
 
     //drawWorkspace(xmin, xmax, ymin, ymax)
     drawWorkspace(xmin, xmax, ymin, ymax);
@@ -400,235 +379,6 @@ function init3D() {
 
 }
 
-// function updateSplitCameraAspect(width, height) {
-//   var halfWidth = Math.max(1, Math.floor(width / 2));
-//   var aspect = halfWidth / Math.max(1, height);
-
-//   if (cameraXY) {
-//     cameraXY.aspect = aspect;
-//     cameraXY.updateProjectionMatrix();
-//   }
-
-//   if (cameraZ) {
-//     cameraZ.aspect = aspect;
-//     cameraZ.updateProjectionMatrix();
-//   }
-// }
-
-function updateSplitCameraAspect(width, height) {
-
-    var rightWidth = 100;
-    var aspect = rightWidth / height;
-
-    if (cameraZ) {
-        cameraZ.aspect = aspect;
-        cameraZ.updateProjectionMatrix();
-    }
-
-    if (cameraXY) {
-        cameraXY.aspect = (width - rightWidth) / height;
-        cameraXY.updateProjectionMatrix();
-    }
-}
-
-
-
-function syncSplitCameras() {
-  if (!cameraXY || !cameraZ) return;
-
-  var target = (!disable3Dcontrols && controls) ? controls.target : new THREE.Vector3(0, 0, 0);
-  var distance = Math.max(10, camera.position.distanceTo(target));
-
-  cameraXY.fov = camera.fov;
-  cameraXY.position.set(target.x, target.y, target.z + distance);
-  cameraXY.up.set(0, 1, 0);
-  cameraXY.lookAt(target);
-  cameraXY.updateProjectionMatrix();
-  cameraXY.updateMatrixWorld();
-
-  // The right viewport is a fixed XZ projection. It shows the current
-  // tool/simulation cursor depth but does not accept mouse or touch input.
-  var depthTarget = target.clone();
-  if (typeof cone !== 'undefined' && cone) {
-    depthTarget.x = cone.position.x;
-    depthTarget.z = cone.position.z;
-  }
-
-  cameraZ.fov = camera.fov;
-  
-  var depthDistance = 50;
-  cameraZ.position.set(
-    depthTarget.x,
-    depthTarget.y - depthDistance,
-    depthTarget.z
-  );
-  // cameraZ.position.set(depthTarget.x, depthTarget.y - distance, depthTarget.z);
-
-  cameraZ.up.set(0, 0, 1);
-  cameraZ.lookAt(depthTarget);
-  cameraZ.updateProjectionMatrix();
-  cameraZ.updateMatrixWorld();
-}
-
-function renderSplitView() {
-  var width = renderer.domElement.clientWidth;
-  var height = renderer.domElement.clientHeight;
-  // var leftWidth = Math.floor(width / 2);
-  // var rightWidth = width - leftWidth;
-  
-  var rightWidth = 100;
-  var leftWidth = width - rightWidth;
-
-  updateSplitCameraAspect(width, height);
-  syncSplitCameras();
-
-  renderer.setScissorTest(true);
-  renderer.setViewport(0, 0, leftWidth, height);
-  renderer.setScissor(0, 0, leftWidth, height);
-  renderer.render(scene, cameraXY);
-
-  renderer.setViewport(leftWidth, 0, rightWidth, height);
-  renderer.setScissor(leftWidth, 0, rightWidth, height);
-  renderer.render(scene, cameraZ);
-  renderer.setScissorTest(false);
-}
-
-function createCoordinatePickerUI() {
-  var renderArea = document.getElementById('renderArea');
-  if (!renderArea || coordinatePickButton) return;
-
-  if (window.getComputedStyle(renderArea).position === 'static') {
-    renderArea.style.position = 'relative';
-  }
-
-  coordinatePickButton = document.createElement('button');
-  coordinatePickButton.type = 'button';
-  coordinatePickButton.id = 'coordinatePickButton';
-  coordinatePickButton.title = 'Select an XY coordinate';
-  coordinatePickButton.setAttribute('aria-label', 'Select an XY coordinate');
-  coordinatePickButton.innerHTML = '&#8982;';
-  coordinatePickButton.style.cssText = [
-    'position:absolute', 'left:12px', 'top:12px', 'z-index:20',
-    'width:38px', 'height:38px', 'padding:0', 'border:1px solid #666',
-    'border-radius:4px', 'background:#ffffff', 'color:#222',
-    'font-size:25px', 'line-height:34px', 'cursor:pointer',
-    'box-shadow:0 1px 4px rgba(0,0,0,.35)'
-  ].join(';');
-  coordinatePickButton.addEventListener('click', enableCoordinatePick);
-  renderArea.appendChild(coordinatePickButton);
-
-  coordinateReadout = document.createElement('div');
-  coordinateReadout.id = 'coordinateReadout';
-  coordinateReadout.textContent = 'XY view';
-  coordinateReadout.style.cssText = [
-    'position:absolute', 'left:60px', 'top:17px', 'z-index:19',
-    'padding:4px 8px', 'border-radius:3px', 'background:rgba(255,255,255,.88)',
-    'color:#222', 'font:12px Arial,sans-serif', 'pointer-events:none'
-  ].join(';');
-  renderArea.appendChild(coordinateReadout);
-
-  var depthLabel = document.createElement('div');
-  depthLabel.textContent = 'XZ depth view';
-  depthLabel.style.cssText = [
-    'position:absolute', 'left:calc(50% + 12px)', 'top:17px', 'z-index:19',
-    'padding:4px 8px', 'border-radius:3px', 'background:rgba(255,255,255,.88)',
-    'color:#222', 'font:12px Arial,sans-serif', 'pointer-events:none'
-  ].join(';');
-  renderArea.appendChild(depthLabel);
-
-  renderer.domElement.addEventListener('click', onCoordinateGridClick, false);
-}
-
-function enableCoordinatePick(event) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  coordinatePickEnabled = true;
-  if (!disable3Dcontrols && controls) controls.enabled = false;
-  renderer.domElement.style.cursor = 'crosshair';
-  coordinatePickButton.style.background = '#d9edf7';
-  coordinateReadout.textContent = 'Click a point in the XY view';
-}
-
-function disableCoordinatePick() {
-  coordinatePickEnabled = false;
-  if (!disable3Dcontrols && controls) controls.enabled = true;
-  renderer.domElement.style.cursor = '';
-
-  if (coordinatePickButton) coordinatePickButton.style.background = '#ffffff';
-}
-
-function onCoordinateGridClick(event) {
-  if (!coordinatePickEnabled) return;
-
-  var rect = renderer.domElement.getBoundingClientRect();
-  var localX = event.clientX - rect.left;
-  var localY = event.clientY - rect.top;
-  var halfWidth = rect.width / 2;
-
-  // Coordinate selection is only available in the left XY viewport.
-  if (localX < 0 || localX >= halfWidth || localY < 0 || localY > rect.height) return;
-
-  var mouse = new THREE.Vector2(
-    (localX / halfWidth) * 2 - 1,
-    -(localY / rect.height) * 2 + 1
-  );
-
-  raycaster.setFromCamera(mouse, cameraXY);
-
-  // Intersect the click ray with the machine's XY plane at Z = 0.
-  var xyPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  var point = new THREE.Vector3();
-  if (!raycaster.ray.intersectPlane(xyPlane, point)) return;
-
-  if (!coordinatePickMarker) {
-    coordinatePickMarker = new THREE.Mesh(
-      new THREE.SphereGeometry(2, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false })
-    );
-    coordinatePickMarker.name = 'Selected XY Coordinate';
-    coordinatePickMarker.renderOrder = 999;
-    scene.add(coordinatePickMarker);
-  }
-  coordinatePickMarker.position.set(point.x, point.y, 0.2);
-  coordinatePickMarker.visible = true;
-
-  var xText = point.x.toFixed(3);
-  var yText = point.y.toFixed(3);
-  coordinateReadout.textContent = 'X: ' + xText + '  Y: ' + yText;
-
-  // alert() is synchronous. Normal OrbitControls are restored immediately
-  // after the user acknowledges the coordinate message.
-  window.alert('Selected coordinate\nX: ' + xText + '\nY: ' + yText);
-  disableCoordinatePick();
-}
-
-function installSplitViewInputGuard() {
-  var canvas = renderer.domElement;
-
-  function isRightViewport(event) {
-    var rect = canvas.getBoundingClientRect();
-    var clientX = event.clientX;
-    if (event.touches && event.touches.length) clientX = event.touches[0].clientX;
-    return clientX >= rect.left + (rect.width / 2);
-  }
-
-  function blockRightViewportInput(event) {
-    if (isRightViewport(event)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  }
-
-  // Capture phase prevents OrbitControls from receiving right-side input.
-  canvas.addEventListener('pointerdown', blockRightViewportInput, true);
-  canvas.addEventListener('mousedown', blockRightViewportInput, true);
-  canvas.addEventListener('wheel', blockRightViewportInput, { capture: true, passive: false });
-  canvas.addEventListener('touchstart', blockRightViewportInput, { capture: true, passive: false });
-}
-
 function animate() {
   if (!pauseAnimation) {
     camera.updateMatrixWorld();
@@ -640,16 +390,19 @@ function animate() {
         scene.remove(scene.children[1])
       }
 
-      if (object) scene.add(object)
-      if (coordinatePickMarker) scene.add(coordinatePickMarker)
-      clearSceneFlag = false;
-    }
+      if (object) {
+        scene.add(object)
+      }
 
+      clearSceneFlag = false;
+    } // end clearSceneFlag
+
+    // Limited FPS https://stackoverflow.com/questions/11285065/limiting-framerate-in-three-js-to-increase-performance-requestanimationframe
     animationLoopTimeout = setTimeout(function() {
       requestAnimationFrame(animate);
     }, 60);
 
-    renderSplitView();
+    renderer.render(scene, camera);
   }
 }
 
@@ -800,9 +553,8 @@ function fixRenderSize() {
       sceneHeight = document.getElementById("renderArea").offsetHeight;
       renderer.setSize(sceneWidth, sceneHeight);
       //renderer.setSize(window.innerWidth, window.innerHeight);
-      camera.aspect = (sceneWidth / 2) / sceneHeight;
+      camera.aspect = sceneWidth / sceneHeight;
       camera.updateProjectionMatrix();
-      updateSplitCameraAspect(sceneWidth, sceneHeight);
       if (!disable3Dcontrols) {
         controls.reset();
       }
