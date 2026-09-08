@@ -769,21 +769,21 @@ io.on("connection", function(socket) {
     const {
       shell
     } = require('electron')
-    shell.openExternal('https://www.getfabber.com/openbuilds?ref=OpenBuilds')
+    shell.openExternal('https://www.getfabber.com/')
   });
 
   socket.on("lightburn", function(data) {
     const {
       shell
     } = require('electron')
-    shell.openExternal('https://openbuildspartstore.com/lightburn/')
+    shell.openExternal('https://lightburnsoftware.com/')
   });
 
   socket.on("vectric", function(data) {
     const {
       shell
     } = require('electron')
-    shell.openExternal('https://openbuildspartstore.com/vectric/')
+    shell.openExternal('https://www.vectric.com/')
   });
 
   socket.on("opencam", function(data) {
@@ -1409,6 +1409,7 @@ io.on("connection", function(socket) {
                 io.sockets.emit('data', output);
               }
             }
+            
             // debug_log("GRBL detected");
             // setTimeout(function() {
             //   io.sockets.emit('grbl', status.machine.firmware)
@@ -4052,3 +4053,5 @@ getSystemInfo().catch(err => console.error("Error retrieving system information:
 // End system info on startup
 
 process.on('exit', () => debug_log('exit'))
+
+
