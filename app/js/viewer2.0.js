@@ -337,7 +337,12 @@ function init3D() {
     cameraXY.up.set(0, 1, 0);
 
     // Fixed XZ depth view. This camera is display-only.
-    cameraZ = new THREE.OrthographicCamera(-25, 25, 120, -120, 0.1, 20000);
+    // cameraZ = new THREE.PerspectiveCamera(45, 1, 1, 20000);
+    cameraZ = new THREE.OrthographicCamera(
+      -100, 100,
+      100, -100,
+      1, 20000
+    );
     cameraZ.up.set(0, 0, 1);
 
     $('#renderArea').append(renderer.domElement);
@@ -417,7 +422,8 @@ function init3D() {
 
 function updateSplitCameraAspect(width, height) {
 
-    var rightWidth = 140;
+    //var rightWidth = 100;
+    var rightWidth = 80;
     var aspect = rightWidth / height;
 
     if (cameraZ) {
@@ -454,16 +460,32 @@ function syncSplitCameras() {
     depthTarget.z = cone.position.z;
   }
 
-  var depthDistance = 1000;
+  cameraZ.fov = camera.fov;
+  
+  var depthDistance = 50;
   cameraZ.position.set(
-    depthTarget.x,
-    depthTarget.y - depthDistance,
-    depthTarget.z
+      depthTarget.x,
+      -10000,            // very far away
+      depthTarget.z
   );
-  // cameraZ.position.set(depthTarget.x, depthTarget.y - distance, depthTarget.z);
 
   cameraZ.up.set(0, 0, 1);
-  cameraZ.lookAt(depthTarget);
+
+  cameraZ.lookAt(
+      depthTarget.x,
+      0,
+      depthTarget.z
+  );
+
+  // cameraZ.position.set(
+  //   depthTarget.x,
+  //   depthTarget.y - depthDistance,
+  //   depthTarget.z
+  // );
+  // cameraZ.position.set(depthTarget.x, depthTarget.y - distance, depthTarget.z);
+  //cameraZ.up.set(0, 0, 1);
+  //cameraZ.lookAt(depthTarget);
+
   cameraZ.updateProjectionMatrix();
   cameraZ.updateMatrixWorld();
 }
@@ -473,8 +495,9 @@ function renderSplitView() {
   var height = renderer.domElement.clientHeight;
   // var leftWidth = Math.floor(width / 2);
   // var rightWidth = width - leftWidth;
-  
-  var rightWidth = 140;
+
+  //var rightWidth = 100;
+  var rightWidth = 80;
   var leftWidth = width - rightWidth;
 
   updateSplitCameraAspect(width, height);
@@ -528,7 +551,7 @@ function createCoordinatePickerUI() {
   var depthLabel = document.createElement('div');
   depthLabel.textContent = 'XZ depth view';
   depthLabel.style.cssText = [
-    'position:absolute', 'right:12px', 'top:17px', 'z-index:19',
+    'position:absolute', 'left:calc(50% + 12px)', 'top:17px', 'z-index:19',
     'padding:4px 8px', 'border-radius:3px', 'background:rgba(255,255,255,.88)',
     'color:#222', 'font:12px Arial,sans-serif', 'pointer-events:none'
   ].join(';');
@@ -564,14 +587,13 @@ function onCoordinateGridClick(event) {
   var rect = renderer.domElement.getBoundingClientRect();
   var localX = event.clientX - rect.left;
   var localY = event.clientY - rect.top;
-  var rightWidth = 140;
-  var leftWidth = rect.width - rightWidth;
+  var halfWidth = rect.width / 2;
 
   // Coordinate selection is only available in the left XY viewport.
-  if (localX < 0 || localX >= leftWidth || localY < 0 || localY > rect.height) return;
+  if (localX < 0 || localX >= halfWidth || localY < 0 || localY > rect.height) return;
 
   var mouse = new THREE.Vector2(
-    (localX / leftWidth) * 2 - 1,
+    (localX / halfWidth) * 2 - 1,
     -(localY / rect.height) * 2 + 1
   );
 
@@ -611,7 +633,7 @@ function installSplitViewInputGuard() {
     var rect = canvas.getBoundingClientRect();
     var clientX = event.clientX;
     if (event.touches && event.touches.length) clientX = event.touches[0].clientX;
-    return clientX >= rect.right - 140;
+    return clientX >= rect.left + (rect.width / 2);
   }
 
   function blockRightViewportInput(event) {
