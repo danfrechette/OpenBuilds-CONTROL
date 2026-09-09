@@ -281,3 +281,24 @@ select {
 .step-list>li::before {
   color: #111 !important;
 }
+
+
+#leftBorder {
+   position: absolute;
+   left: 0;
+   top: 0;
+   width: calc(100% - 140px);
+   height: 100%;
+   border: 2px solid #000;
+   pointer-events: none;
+}
+
+#rightBorder {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 140px;
+    height: 100%;
+    border: 2px solid #000;
+    pointer-events: none;
+}

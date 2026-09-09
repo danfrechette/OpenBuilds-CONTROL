@@ -473,7 +473,7 @@ function renderSplitView() {
   var height = renderer.domElement.clientHeight;
   // var leftWidth = Math.floor(width / 2);
   // var rightWidth = width - leftWidth;
-  
+
   var rightWidth = 140;
   var leftWidth = width - rightWidth;
 
@@ -511,6 +511,7 @@ function createCoordinatePickerUI() {
     'border-radius:4px', 'background:#ffffff', 'color:#222',
     'font-size:25px', 'line-height:34px', 'cursor:pointer',
     'box-shadow:0 1px 4px rgba(0,0,0,.35)'
+
   ].join(';');
   coordinatePickButton.addEventListener('click', enableCoordinatePick);
   renderArea.appendChild(coordinatePickButton);
@@ -600,8 +601,10 @@ function onCoordinateGridClick(event) {
 
   // alert() is synchronous. Normal OrbitControls are restored immediately
   // after the user acknowledges the coordinate message.
+  console.log('Selected coordinate\nX: ' + xText + '\nY: ' + yText);
   window.alert('Selected coordinate\nX: ' + xText + '\nY: ' + yText);
   disableCoordinatePick();
+  console.log('Selected coordinate\nX: ' + xText + '\nY: ' + yText);
 }
 
 function installSplitViewInputGuard() {
@@ -624,8 +627,9 @@ function installSplitViewInputGuard() {
   // Capture phase prevents OrbitControls from receiving right-side input.
   canvas.addEventListener('pointerdown', blockRightViewportInput, true);
   canvas.addEventListener('mousedown', blockRightViewportInput, true);
-  canvas.addEventListener('wheel', blockRightViewportInput, { capture: true, passive: false });
+  // canvas.addEventListener('wheel', blockRightViewportInput, { capture: true, passive: false });
   canvas.addEventListener('touchstart', blockRightViewportInput, { capture: true, passive: false });
+
 }
 
 function animate() {

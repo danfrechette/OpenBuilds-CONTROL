@@ -39,6 +39,32 @@ function toolAnimate() {
   //     cone.rotation.z += 3.5;
   //   }
   // }
+
+  // Disable coordinate picker while machine is running G-code
+
+  console.log("toolAnimate: laststatus =",laststatus);
+
+  if (laststatus && laststatus.state === "Run"){
+      coordinatePickEnabled = false;
+
+      if (coordinatePickButton) {
+          coordinatePickButton.disabled = true;
+          coordinatePickButton.style.opacity = "0.5";
+          coordinatePickButton.style.cursor = "not-allowed";
+      }
+
+      if (coordinatePickMarker) {
+          coordinatePickMarker.visible = false;
+      }
+  } else {
+      // Re-enable when machine is not running
+      if (coordinatePickButton) {
+          coordinatePickButton.disabled = false;
+          coordinatePickButton.style.opacity = "1";
+          coordinatePickButton.style.cursor = "pointer";
+      }
+  }
+
 }
 
 function populateToolChanges(gcode) {
