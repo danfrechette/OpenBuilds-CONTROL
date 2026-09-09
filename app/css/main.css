@@ -283,11 +283,11 @@ select {
 }
 
 
-#leftBorder {
+/* #leftBorder {
    position: absolute;
    left: 0;
    top: 0;
-   width: calc(100% - 140px);
+   width: calc(100% - 280px);
    height: 100%;
    border: 2px solid #000;
    pointer-events: none;
@@ -295,10 +295,10 @@ select {
 
 #rightBorder {
     position: absolute;
-    right: 0;
+    right: 140px;
     top: 0;
     width: 140px;
     height: 100%;
     border: 2px solid #000;
     pointer-events: none;
-}
+} */

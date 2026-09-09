@@ -179,7 +179,8 @@ $(document).ready(function() {
       parseGcodeInWebWorker(data)
       $('#controlTab').click()
       if (!webgl) {
-        $('#gcodeviewertab').click();
+        //$('#gcodeviewertab').click();
+        $('#view3dtab').click();
       } else {
         $('#gcodeeditortab').click()
       }

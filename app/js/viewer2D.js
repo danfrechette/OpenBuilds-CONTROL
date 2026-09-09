@@ -1,12 +1,12 @@
 // Global Vars
 var scene = true;
-var camera, renderer;
+var camera, cameraXY, cameraZ, renderer;
 var projector, mouseVector, containerWidth, containerHeight;
 var raycaster = new THREE.Raycaster();
 var gridsystem = new THREE.Group();
 
 var container, stats;
-var controls, control, gridsystem, helper;
+var camera, controls, control, scene, renderer, gridsystem, helper;
 var clock = new THREE.Clock();
 
 var marker;
@@ -49,10 +49,6 @@ var xmin = 0,
   ymax = 207
 
 var machineCoordinateSpace = false;
-
-var viewerMode = "3d";
-var saved3DView = null;
-var cameraXZ; 
 
 function drawWorkspace(xmin, xmax, ymin, ymax) {
 
@@ -332,10 +328,17 @@ function init3D() {
     });
     // ThreeJS Render/Control/Camera
     scene = new THREE.Scene();
+    // The original camera remains the navigation camera used by OrbitControls.
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
     camera.position.z = 295;
-    //cameraXZ = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
-    cameraXZ = new THREE.OrthographicCamera(-50, 50, 100, -100, 1, 1000);
+
+    // Display cameras used by the two side-by-side viewports.
+    cameraXY = new THREE.PerspectiveCamera(45, 1, 1, 20000);
+    cameraXY.up.set(0, 1, 0);
+
+    // Fixed XZ depth view. This camera is display-only.
+    cameraZ = new THREE.OrthographicCamera(-25, 25, 120, -120, 0.1, 20000);
+    cameraZ.up.set(0, 0, 1);
 
     $('#renderArea').append(renderer.domElement);
     renderer.setClearColor(0xffffff, 1); // Background color of viewer = transparent
@@ -344,9 +347,10 @@ function init3D() {
 
     sceneWidth = document.getElementById("renderArea").offsetWidth,
       sceneHeight = document.getElementById("renderArea").offsetHeight;
-    camera.aspect = sceneWidth / sceneHeight;
+    camera.aspect = (sceneWidth / 2) / sceneHeight;
     renderer.setSize(sceneWidth, sceneHeight)
     camera.updateProjectionMatrix();
+    updateSplitCameraAspect(sceneWidth, sceneHeight);
 
 
     if (!disable3Dcontrols) {
@@ -366,6 +370,11 @@ function init3D() {
       controls.enableKeys = false; // Disable Keyboard on canvas
     }
 
+
+    // Add the one-shot coordinate-picking button and prevent the fixed
+    // depth viewport from forwarding input to OrbitControls.
+    createCoordinatePickerUI();
+    installSplitViewInputGuard();
 
     //drawWorkspace(xmin, xmax, ymin, ymax)
     drawWorkspace(xmin, xmax, ymin, ymax);
@@ -502,7 +511,6 @@ function createCoordinatePickerUI() {
     'border-radius:4px', 'background:#ffffff', 'color:#222',
     'font-size:25px', 'line-height:34px', 'cursor:pointer',
     'box-shadow:0 1px 4px rgba(0,0,0,.35)'
-
   ].join(';');
   coordinatePickButton.addEventListener('click', enableCoordinatePick);
   renderArea.appendChild(coordinatePickButton);
@@ -618,7 +626,6 @@ function installSplitViewInputGuard() {
   canvas.addEventListener('mousedown', blockRightViewportInput, true);
   // canvas.addEventListener('wheel', blockRightViewportInput, { capture: true, passive: false });
   canvas.addEventListener('touchstart', blockRightViewportInput, { capture: true, passive: false });
-
 }
 
 function animate() {
@@ -641,8 +648,7 @@ function animate() {
       requestAnimationFrame(animate);
     }, 60);
 
-    //renderer.render(scene, camera);
-    performRender();
+    renderSplitView();
   }
 }
 
@@ -787,39 +793,25 @@ function makeSprite(scene, rendererType, vals) {
 // Global Function to keep three fullscreen
 
 function fixRenderSize() {
-  if (!renderer || !camera) {
-    return;
+  if (renderer) {
+    setTimeout(function() {
+      sceneWidth = document.getElementById("renderArea").offsetWidth;
+      sceneHeight = document.getElementById("renderArea").offsetHeight;
+      renderer.setSize(sceneWidth, sceneHeight);
+      //renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = (sceneWidth / 2) / sceneHeight;
+      camera.updateProjectionMatrix();
+      updateSplitCameraAspect(sceneWidth, sceneHeight);
+      if (!disable3Dcontrols) {
+        controls.reset();
+      }
+      setTimeout(function() {
+        resetView();
+      }, 10);
+    }, 10)
+
   }
 
-  setTimeout(function () {
-    var renderArea = document.getElementById("renderArea");
-
-    if (!renderArea) {
-      console.error("Unable to resize viewer: #renderArea was not found.");
-      return;
-    }
-
-    var sceneWidth = renderArea.clientWidth;
-    var sceneHeight = renderArea.clientHeight;
-
-    // Do not resize while the tab is hidden.
-    if (sceneWidth <= 0 || sceneHeight <= 0) {
-      return;
-    }
-
-    renderer.setSize(sceneWidth, sceneHeight);
-
-    camera.aspect = sceneWidth / sceneHeight;
-    camera.updateProjectionMatrix();
-
-    if (controls) {
-      controls.update();
-    }
-
-    if (scene) {
-      renderer.render(scene, camera);
-    }
-  }, 50);
 }
 
 $(window).on('resize', function() {
@@ -850,278 +842,81 @@ function resetView(object) {
 }
 
 function drawMachineCoordinates(status) {
-    if (laststatus != undefined && grblParams.$130 !== undefined && grblParams.$131 !== undefined && grblParams.$132 !== undefined) 
-    {
-      var machineCoordinatesBoxMaxX = status.machine.position.work.x - status.machine.position.offset.x
-      var machineCoordinatesBoxMaxY = status.machine.position.work.y - status.machine.position.offset.y
-      var machineCoordinatesBoxMaxZ = status.machine.position.work.z - status.machine.position.offset.z
 
-      var machineCoordinatesBoxMinX = machineCoordinatesBoxMaxX - grblParams.$130
-      var machineCoordinatesBoxMinY = machineCoordinatesBoxMaxY - grblParams.$131
-      var machineCoordinatesBoxMinZ = machineCoordinatesBoxMaxZ - grblParams.$132
+  if (laststatus != undefined && grblParams.$130 !== undefined && grblParams.$131 !== undefined && grblParams.$132 !== undefined) {
+    var machineCoordinatesBoxMaxX = status.machine.position.work.x - status.machine.position.offset.x
+    var machineCoordinatesBoxMaxY = status.machine.position.work.y - status.machine.position.offset.y
+    var machineCoordinatesBoxMaxZ = status.machine.position.work.z - status.machine.position.offset.z
 
-      console.log("X", machineCoordinatesBoxMinX, machineCoordinatesBoxMaxX)
-      console.log("Y", machineCoordinatesBoxMinY, machineCoordinatesBoxMaxY)
-      console.log("Z", machineCoordinatesBoxMinZ, machineCoordinatesBoxMaxZ)
+    var machineCoordinatesBoxMinX = machineCoordinatesBoxMaxX - grblParams.$130
+    var machineCoordinatesBoxMinY = machineCoordinatesBoxMaxY - grblParams.$131
+    var machineCoordinatesBoxMinZ = machineCoordinatesBoxMaxZ - grblParams.$132
 
-      workspace.remove(machineCoordinateSpace);
-      machineCoordinateSpace = new THREE.Group();
+    console.log("X", machineCoordinatesBoxMinX, machineCoordinatesBoxMaxX)
+    console.log("Y", machineCoordinatesBoxMinY, machineCoordinatesBoxMaxY)
+    console.log("Z", machineCoordinatesBoxMinZ, machineCoordinatesBoxMaxZ)
 
-      var material = new THREE.LineBasicMaterial({
-        color: 0x888888,
-        transparent: true,
-        opacity: 0.3
-      });
 
-      // Z min layer
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    workspace.remove(machineCoordinateSpace);
+    machineCoordinateSpace = new THREE.Group();
 
-      // Z max layer
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    var material = new THREE.LineBasicMaterial({
+      color: 0x888888,
+      transparent: true,
+      opacity: 0.3
+    });
 
-      // corner f/l
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    // Z min layer
+    var points = [];
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
+    var geometry = new THREE.BufferGeometry().setFromPoints(points);
+    machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
-      // corner f/r
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    // Z max layer
+    var points = [];
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
+    var geometry = new THREE.BufferGeometry().setFromPoints(points);
+    machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
-      // corner r/l
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    // corner f/l
+    var points = [];
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
+    var geometry = new THREE.BufferGeometry().setFromPoints(points);
+    machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
-      // corner r/r
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    // corner f/r
+    var points = [];
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
+    var geometry = new THREE.BufferGeometry().setFromPoints(points);
+    machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
-      workspace.add(machineCoordinateSpace);
-    }
+    // corner r/l
+    var points = [];
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
+    var geometry = new THREE.BufferGeometry().setFromPoints(points);
+    machineCoordinateSpace.add(new THREE.Line(geometry, material));
+
+    // corner r/r
+    var points = [];
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
+    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
+    var geometry = new THREE.BufferGeometry().setFromPoints(points);
+    machineCoordinateSpace.add(new THREE.Line(geometry, material));
+
+    workspace.add(machineCoordinateSpace);
   }
 
 
-  function updateViewerModeTabs() {
-    $("#view2dtab").toggleClass("active", viewerMode === "2d");
-    $("#view3dtab").toggleClass("active", viewerMode === "3d");
-  }
 
-  $("#view2dtab").on("click", function (event) {
-    // event.preventDefault();
-    set2DView();
-  });
-
-  $("#view3dtab").on("click", function (event) {
-    // event.preventDefault();
-    set3DView();
-  });
-  
-  // function refreshViewerSize() {
-  //     window.setTimeout(function () {
-  //         fixRenderSize();
-
-  //         if (typeof renderer !== "undefined" &&
-  //             typeof scene !== "undefined" &&
-  //             typeof camera !== "undefined") {
-  //             renderer.render(scene, camera);
-  //         }
-  //     }, 50);
-
-  //     updateViewerModeTabs();
-  // }
-  
-  function refreshViewerSize() {
-      window.setTimeout(function () {
-          var viewer = document.getElementById("renderArea");
-
-          if (viewer && viewer.clientWidth > 0 && viewer.clientHeight > 0) {
-              fixRenderSize();
-
-              if (typeof renderer !== "undefined" &&
-                  typeof scene !== "undefined" &&
-                  typeof camera !== "undefined") {
-                  //renderer.render(scene, camera);
-                  performRender();
-              }
-          }
-      }, 50);
-      updateViewerModeTabs();
-  }
-  
-
-  function set2DView() {
-      if (!camera || !cameraXZ || !controls) {
-          return;
-      }
-
-      if (viewerMode !== "2d") {
-          save3DView();
-      }
-
-      // Set our mode to 2d (which our renderer will now recognize as the split view)
-      viewerMode = "2d";
-
-      var target = controls.target.clone();
-      var distance = camera.position.distanceTo(target);
-
-      if (!isFinite(distance) || distance < 1) {
-          distance = 1000;
-      }
-
-      // --- LEFT PANE CAMERA (XY Plane - Top Down) ---
-      camera.up.set(0, 1, 0);
-      camera.position.set(target.x, target.y, target.z + distance);
-      camera.lookAt(target);
-
-      // --- RIGHT PANE CAMERA (XZ Plane - Side Profile looking at Depth) ---
-      cameraXZ.up.set(0, 0, 1); // Z acts as the vertical depth axis
-      cameraXZ.zoom = 3.0; 
-      // // Position the camera looking directly down the Y-axis to see the XZ profile
-      // cameraXZ.position.set(target.x, target.y - distance, target.z); 
-      // cameraXZ.lookAt(target);
-
-      if (typeof cone !== "undefined" && cone) {
-        cone.scale.set(1.0, 0.4, 1.0); 
-      }
-
-      /*
-      * Disable rotation so the user stays locked in the 2D plane orientations,
-      * but allow panning and zooming.
-      */
-      controls.enableRotate = false;
-      controls.enablePan = true;
-      controls.enableZoom = true;
-
-      camera.updateProjectionMatrix();
-      cameraXZ.updateProjectionMatrix();
-      controls.update();
-
-      refreshViewerSize();
-  }
-
-  function save3DView() {
-      if (!camera || !controls) {
-          return;
-      }
-
-      saved3DView = {
-          position: camera.position.clone(),
-          quaternion: camera.quaternion.clone(),
-          up: camera.up.clone(),
-          target: controls.target.clone(),
-          zoom: camera.zoom
-      };
-  }
-  
-  function set3DView() {
-    if (!camera || !controls) {
-        return;
-    }
-
-    viewerMode = "3d";
-
-    controls.enableRotate = true;
-    controls.enablePan = true;
-    controls.enableZoom = true;
-
-    if (saved3DView) {
-        camera.position.copy(saved3DView.position);
-        camera.quaternion.copy(saved3DView.quaternion);
-        camera.up.copy(saved3DView.up);
-        controls.target.copy(saved3DView.target);
-
-        if (typeof saved3DView.zoom === "number") {
-            camera.zoom = saved3DView.zoom;
-        }
-    } else {
-        /*
-        * Call the application's existing default/isometric
-        * camera function here, if one already exists.
-        */
-        camera.up.set(0, 1, 0);
-        
-        if (typeof resetView === "function") {
-            resetView();
-        }
-    }
-
-    camera.updateProjectionMatrix();
-    controls.update();
-    refreshViewerSize();
-  }
-
-  function performRender() {
-    if (!renderer || !scene || !camera || !cameraXZ) return;
-
-    var renderArea = document.getElementById("renderArea");
-    if (!renderArea) return;
-
-    var width = renderArea.clientWidth;
-    var height = renderArea.clientHeight;
-
-    if (viewerMode === "2d") {
-        renderer.setScissorTest(true);
-
-        // --- NEW CALCULATIONS FOR THE 75/25 SPLIT ---
-        var rightWidth = 100; // Locked absolute width in pixels
-        var rightMargin = 100;
-        var leftWidth = width - (rightWidth + rightMargin); // Takes up all remaining screen space
-
-        // --- LEFT PANEL: XY PLANE (75% WIDTH) ---
-        renderer.setViewport(0, 0, leftWidth, height);
-        renderer.setScissor(0, 0, leftWidth, height);
-        camera.aspect = leftWidth / height;
-        camera.updateProjectionMatrix();
-        renderer.render(scene, camera);
-
-        // --- RIGHT PANEL: XZ PLANE PROFILE (25% WIDTH) ---
-        renderer.setViewport(leftWidth-rightMargin, 0, rightWidth, height);
-        renderer.setScissor(leftWidth-rightMargin, 0, rightWidth, height);
-        
-        /* 
-        * TRACKING THE CONE: Keep the XZ profile camera locked directly onto 
-        * the cone's real-time X and Z position as it changes depth.
-        */
-        if (typeof cone !== "undefined" && cone && cone.position) {
-            // Position camera looking straight down the Y axis, aligned with the cone
-            cameraXZ.position.set(cone.position.x, cone.position.y - 300, cone.position.z);
-            cameraXZ.lookAt(cone.position.x, cone.position.y, cone.position.z);
-        }
-
-        cameraXZ.aspect = rightWidth / height;
-        cameraXZ.updateProjectionMatrix();
-        renderer.render(scene, cameraXZ);
-
-        renderer.setScissorTest(false);
-    } else {
-        // Standard full canvas rendering for 3D mode
-        renderer.setViewport(0, 0, width, height);
-        renderer.render(scene, camera);
-    }
 }
-

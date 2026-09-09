@@ -84,7 +84,7 @@ function parseGcodeInWebWorker(gcode) {
       worker.addEventListener('message', function(e) {
         // console.log('webworker message', e)
         if (e.data.progress != undefined) {
-          $('#3dviewlabel').html(' 3D View (rendering, please wait... ' + e.data.progress + '% )')
+          $('#view3dlabel').html(' 3D View (rendering, please wait... ' + e.data.progress + '% )')
         } else {
           if (scene.getObjectByName('gcodeobject')) {
             scene.remove(scene.getObjectByName('gcodeobject'))
@@ -120,7 +120,8 @@ function parseGcodeInWebWorker(gcode) {
             // animate();
             setTimeout(function() {
               if (webgl) {
-                $('#gcodeviewertab').click();
+                //$('#gcodeviewertab').click();
+                $('#view3dtab').click();
               }
               clearSceneFlag = true;
               resetView();
@@ -134,12 +135,12 @@ function parseGcodeInWebWorker(gcode) {
                 printLog("<span class='fg-red'>[ GCODE Parser ]</span><span class='fg-darkGreen'> GCODE Preview Rendered Succesfully: Total lines: <b>" + object.userData.linePoints.length + "</b> / Estimated GCODE Run Time: <b>" + timeConvert(timeremain) + "</b>")
               }
             }, 200);
-            $('#3dviewicon').removeClass('fa-pulse');
-            $('#3dviewlabel').html(' 3D View')
+            $('#view3dicon').removeClass('fa-pulse');
+            $('#view3dlabel').html(' 3D View')
           } else {
             // Didn't get an Object
-            $('#3dviewicon').removeClass('fa-pulse');
-            $('#3dviewlabel').html(' 3D View')
+            $('#view3dicon').removeClass('fa-pulse');
+            $('#view3dlabel').html(' 3D View')
           }
         }
 
@@ -149,8 +150,8 @@ function parseGcodeInWebWorker(gcode) {
         'data': gcode
       });
 
-      $('#3dviewicon').addClass('fa-pulse');
-      $('#3dviewlabel').html(' 3D View (rendering, please wait...)')
+      $('#view3dicon').addClass('fa-pulse');
+      $('#view3dlabel').html(' 3D View (rendering, please wait...)')
 
       // populateToolChanges(gcode)
     }
@@ -167,7 +168,8 @@ function runSimFrom(startindex, singleLineOnly) {
   if (singleLineOnly) {
     simSingleLine = startindex;
   }
-  $('#gcodeviewertab').click()
+  //$('#gcodeviewertab').click()
+  $('#view3dtab').click();
   if (startindex) {
     for (i = 0; i < object.userData.lines.length; i++)
       if (object.userData.lines[i].args.indx == startindex) {
@@ -264,9 +266,16 @@ function runSim() {
         x: posx,
         y: posy,
         z: posz,
+
+        onUpdate: function() {
+          if (typeof renderer !== "undefined" && typeof scene !== "undefined" && typeof camera !== "undefined") {
+            //renderer.render(scene, camera);
+            performRender();
+          }
+        },
+        
         onComplete: function() {
           if (simRunning == false) {
-            //return
             simstop();
           } else {
             simIdx++;

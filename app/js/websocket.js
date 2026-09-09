@@ -178,7 +178,8 @@ function initSocket() {
     parseGcodeInWebWorker(data.gcode)
     $('#controlTab').click()
     if (webgl) {
-      $('#gcodeviewertab').click();
+      //$('#gcodeviewertab').click();
+      $('#view3dtab').click();
     } else {
       $('#gcodeeditortab').click()
     }
