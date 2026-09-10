@@ -19,6 +19,7 @@ var coordinateReadout;
 var sizexmax;
 var sizeymax;
 var lineincrement = 50
+var cameraXYZoomFactor = 1.0;
 var camvideo;
 var objectsInScene = []; //array that holds all objects we added to the scene.
 var clearSceneFlag = false;
@@ -52,7 +53,7 @@ var machineCoordinateSpace = false;
 
 var viewerMode = "3d";
 var saved3DView = null;
-var cameraXZ; 
+var cameraXZ;
 
 function drawWorkspace(xmin, xmax, ymin, ymax) {
 
@@ -121,8 +122,8 @@ function drawWorkspace(xmin, xmax, ymin, ymax) {
         value: 0.71
       }
     };
-    uniforms.topColor.value.copy(hemiLight.color);
 
+    uniforms.topColor.value.copy(hemiLight.color);
     scene.fog.color.copy(uniforms.bottomColor.value);
 
     var vertexShader = document.getElementById('vertexShader').textContent;
@@ -336,8 +337,34 @@ function init3D() {
     camera.position.z = 295;
     //cameraXZ = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
     cameraXZ = new THREE.OrthographicCamera(-50, 50, 100, -100, 1, 1000);
+    cameraXY = new THREE.OrthographicCamera(-100, 100, 100, -100, 1, 20000);
 
     $('#renderArea').append(renderer.domElement);
+
+    // ========================================================
+    // ADDED: 2D Orthographic Zoom Event Listener
+    // ========================================================
+    renderer.domElement.addEventListener('wheel', function(event) {
+      if (viewerMode === "2d") {
+        // Stop the default browser scroll and background OrbitControls zooms
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Determine zoom scale based on wheel spin direction
+        var zoomDelta = event.deltaY > 0 ? 1.1 : 0.9;
+        cameraXYZoomFactor *= zoomDelta;
+
+        // Apply clamping limits so the user can't zoom into infinity
+        cameraXYZoomFactor = Math.max(0.05, Math.min(cameraXYZoomFactor, 25.0));
+
+        // Fire a render pass to visually apply the update instantly
+        if (typeof performRender === "function") {
+            performRender();
+        }
+      }
+    }, { passive: false });
+    // ========================================================
+
     renderer.setClearColor(0xffffff, 1); // Background color of viewer = transparent
     // renderer.setSize(window.innerWidth - 10, window.innerHeight - 10);
     renderer.clear();
@@ -391,73 +418,165 @@ function init3D() {
 
 }
 
-// function updateSplitCameraAspect(width, height) {
-//   var halfWidth = Math.max(1, Math.floor(width / 2));
-//   var aspect = halfWidth / Math.max(1, height);
-
-//   if (cameraXY) {
-//     cameraXY.aspect = aspect;
-//     cameraXY.updateProjectionMatrix();
-//   }
-
-//   if (cameraZ) {
-//     cameraZ.aspect = aspect;
-//     cameraZ.updateProjectionMatrix();
-//   }
-// }
-
 function updateSplitCameraAspect(width, height) {
-
     var rightWidth = 140;
-    var aspect = rightWidth / height;
+    var aspectZ = rightWidth / height;
 
     if (cameraZ) {
-        cameraZ.aspect = aspect;
+        cameraZ.aspect = aspectZ;
         cameraZ.updateProjectionMatrix();
     }
 
-    if (cameraXY) {
-        cameraXY.aspect = (width - rightWidth) / height;
+    // UPDATE THIS: Adjust orthographic bounds for cameraXY to prevent stretching
+    if (cameraXY && cameraXY.isOrthographicCamera) {
+        var leftWidth = width - rightWidth;
+
+        // Choose a view factor/frustum size (adjust this number to change default zoom level)
+        var viewSize = 300;
+        var aspectXY = leftWidth / height;
+
+        cameraXY.left = -viewSize * aspectXY / 2;
+        cameraXY.right = viewSize * aspectXY / 2;
+        cameraXY.top = viewSize / 2;
+        cameraXY.bottom = -viewSize / 2;
+
         cameraXY.updateProjectionMatrix();
     }
 }
 
 
+// function updateSplitCameraAspect(width, height) {
+
+//     var rightWidth = 140;
+//     var aspect = rightWidth / height;
+
+//     if (cameraZ) {
+//         cameraZ.aspect = aspect;
+//         cameraZ.updateProjectionMatrix();
+//     }
+
+//     if (cameraXY) {
+//         cameraXY.aspect = (width - rightWidth) / height;
+//         cameraXY.updateProjectionMatrix();
+//     }
+// }
+
+// function syncSplitCameras() {
+//   if (!cameraXY || !cameraZ) return;
+
+//   var target = (!disable3Dcontrols && controls) ? controls.target : new THREE.Vector3(0, 0, 0);
+
+//   // ==========================================
+//   // PANE 1: LEFT VIEWPORT (XY Plane - Slicing Layer)
+//   // ==========================================
+//   var distance = Math.max(10, camera.position.distanceTo(target));
+
+//   cameraXY.fov = camera.fov;
+//   cameraXY.position.set(target.x, target.y, target.z + distance);
+//   cameraXY.up.set(0, 1, 0);
+//   cameraXY.lookAt(target);
+
+//   var cursorDepthZ = 0;
+//   if (typeof cone !== 'undefined' && cone && cone.position) {
+//     cursorDepthZ = cone.position.z;
+//   }
+
+//   var totalSliceThickness = 2.0;
+//   var halfThickness = totalSliceThickness / 2;
+//   var distanceToCursorZ = cameraXY.position.z - cursorDepthZ;
+
+//   cameraXY.near = Math.max(0.1, distanceToCursorZ - halfThickness);
+//   cameraXY.far = distanceToCursorZ + halfThickness;
+
+//   cameraXY.updateProjectionMatrix();
+//   cameraXY.updateMatrixWorld();
+
+
+//   // ==========================================
+//   // PANE 2: RIGHT VIEWPORT (XZ Depth Profile - Y REMOVED)
+//   // ==========================================
+//   var depthTarget = target.clone();
+//   if (typeof cone !== 'undefined' && cone && cone.position) {
+//     depthTarget.x = cone.position.x;
+//     depthTarget.z = cone.position.z;
+//   }
+
+//   var depthDistance = 1000;
+
+//   // FIX: Force Y to a static 0 coordinate for both the camera placement and its focal target point.
+//   // This removes any angle changes or shifting caused by tool movement along the Y axis.
+//   cameraZ.position.set(
+//     depthTarget.x,
+//     0 - depthDistance, // Locked static Y plane perspective
+//     depthTarget.z
+//   );
+
+//   cameraZ.up.set(0, 0, 1);
+
+//   // Look at the tool position projected flatly onto the Y=0 plane
+//   cameraZ.lookAt(new THREE.Vector3(depthTarget.x, 0, depthTarget.z));
+
+//   // Broad clipping boundaries so X and Z lines are always seen clearly
+//   cameraZ.near = -2000;
+//   cameraZ.far = 2000;
+
+//   cameraZ.updateProjectionMatrix();
+//   cameraZ.updateMatrixWorld();
+// }
 
 function syncSplitCameras() {
   if (!cameraXY || !cameraZ) return;
 
   var target = (!disable3Dcontrols && controls) ? controls.target : new THREE.Vector3(0, 0, 0);
+
+  // ==========================================
+  // PANE 1: LEFT VIEWPORT (Pure Orthographic XY Plane)
+  // ==========================================
   var distance = Math.max(10, camera.position.distanceTo(target));
 
-  cameraXY.fov = camera.fov;
+  // REMOVED: cameraXY.fov = camera.fov (Not used in Orthographic)
+
   cameraXY.position.set(target.x, target.y, target.z + distance);
   cameraXY.up.set(0, 1, 0);
   cameraXY.lookAt(target);
+
+  // Slicing logic remains identical
+  var cursorDepthZ = 0;
+  if (typeof cone !== 'undefined' && cone && cone.position) {
+    cursorDepthZ = cone.position.z;
+  }
+
+  var totalSliceThickness = 2.0;
+  var halfThickness = totalSliceThickness / 2;
+  var distanceToCursorZ = cameraXY.position.z - cursorDepthZ;
+
+  cameraXY.near = Math.max(0.1, distanceToCursorZ - halfThickness);
+  cameraXY.far = distanceToCursorZ + halfThickness;
+
   cameraXY.updateProjectionMatrix();
   cameraXY.updateMatrixWorld();
 
-  // The right viewport is a fixed XZ projection. It shows the current
-  // tool/simulation cursor depth but does not accept mouse or touch input.
+  // ==========================================
+  // PANE 2: RIGHT VIEWPORT (XZ Depth Profile - Kept Same)
+  // ==========================================
   var depthTarget = target.clone();
-  if (typeof cone !== 'undefined' && cone) {
+  if (typeof cone !== 'undefined' && cone && cone.position) {
     depthTarget.x = cone.position.x;
     depthTarget.z = cone.position.z;
   }
 
   var depthDistance = 1000;
-  cameraZ.position.set(
-    depthTarget.x,
-    depthTarget.y - depthDistance,
-    depthTarget.z
-  );
-  // cameraZ.position.set(depthTarget.x, depthTarget.y - distance, depthTarget.z);
-
+  cameraZ.position.set(depthTarget.x, 0 - depthDistance, depthTarget.z);
   cameraZ.up.set(0, 0, 1);
-  cameraZ.lookAt(depthTarget);
+  cameraZ.lookAt(new THREE.Vector3(depthTarget.x, 0, depthTarget.z));
+
+  cameraZ.near = -2000;
+  cameraZ.far = 2000;
+
   cameraZ.updateProjectionMatrix();
   cameraZ.updateMatrixWorld();
 }
+
 
 function renderSplitView() {
   var width = renderer.domElement.clientWidth;
@@ -850,7 +969,7 @@ function resetView(object) {
 }
 
 function drawMachineCoordinates(status) {
-    if (laststatus != undefined && grblParams.$130 !== undefined && grblParams.$131 !== undefined && grblParams.$132 !== undefined) 
+    if (laststatus != undefined && grblParams.$130 !== undefined && grblParams.$131 !== undefined && grblParams.$132 !== undefined)
     {
       var machineCoordinatesBoxMaxX = status.machine.position.work.x - status.machine.position.offset.x
       var machineCoordinatesBoxMaxY = status.machine.position.work.y - status.machine.position.offset.y
@@ -940,7 +1059,7 @@ function drawMachineCoordinates(status) {
     // event.preventDefault();
     set3DView();
   });
-  
+
   // function refreshViewerSize() {
   //     window.setTimeout(function () {
   //         fixRenderSize();
@@ -954,7 +1073,7 @@ function drawMachineCoordinates(status) {
 
   //     updateViewerModeTabs();
   // }
-  
+
   function refreshViewerSize() {
       window.setTimeout(function () {
           var viewer = document.getElementById("renderArea");
@@ -972,10 +1091,10 @@ function drawMachineCoordinates(status) {
       }, 50);
       updateViewerModeTabs();
   }
-  
+
 
   function set2DView() {
-      if (!camera || !cameraXZ || !controls) {
+      if (!camera || !cameraXZ || !cameraXY || !controls) {
           return;
       }
 
@@ -998,15 +1117,21 @@ function drawMachineCoordinates(status) {
       camera.position.set(target.x, target.y, target.z + distance);
       camera.lookAt(target);
 
+      // --- FIX: Apply calculations strictly to cameraXY instead of camera ---
+      cameraXY.up.set(0, 1, 0);
+      cameraXY.position.set(target.x, target.y, target.z + distance);
+      cameraXY.lookAt(target);
+
       // --- RIGHT PANE CAMERA (XZ Plane - Side Profile looking at Depth) ---
       cameraXZ.up.set(0, 0, 1); // Z acts as the vertical depth axis
-      cameraXZ.zoom = 3.0; 
+      cameraXZ.zoom = 3.0;
+
       // // Position the camera looking directly down the Y-axis to see the XZ profile
-      // cameraXZ.position.set(target.x, target.y - distance, target.z); 
+      // cameraXZ.position.set(target.x, target.y - distance, target.z);
       // cameraXZ.lookAt(target);
 
       if (typeof cone !== "undefined" && cone) {
-        cone.scale.set(1.0, 0.4, 1.0); 
+        cone.scale.set(1.0, 0.4, 1.0);
       }
 
       /*
@@ -1019,6 +1144,7 @@ function drawMachineCoordinates(status) {
 
       camera.updateProjectionMatrix();
       cameraXZ.updateProjectionMatrix();
+      cameraXY.updateProjectionMatrix();
       controls.update();
 
       refreshViewerSize();
@@ -1037,7 +1163,7 @@ function drawMachineCoordinates(status) {
           zoom: camera.zoom
       };
   }
-  
+
   function set3DView() {
     if (!camera || !controls) {
         return;
@@ -1064,7 +1190,7 @@ function drawMachineCoordinates(status) {
         * camera function here, if one already exists.
         */
         camera.up.set(0, 1, 0);
-        
+
         if (typeof resetView === "function") {
             resetView();
         }
@@ -1075,53 +1201,123 @@ function drawMachineCoordinates(status) {
     refreshViewerSize();
   }
 
-  function performRender() {
-    if (!renderer || !scene || !camera || !cameraXZ) return;
+//   function performRender() {
+//     if (!renderer || !scene || !camera || !cameraXZ || !cameraXY) return;
 
-    var renderArea = document.getElementById("renderArea");
-    if (!renderArea) return;
+//     var renderArea = document.getElementById("renderArea");
+//     if (!renderArea) return;
 
-    var width = renderArea.clientWidth;
-    var height = renderArea.clientHeight;
+//     var width = renderArea.clientWidth;
+//     var height = renderArea.clientHeight;
 
-    if (viewerMode === "2d") {
-        renderer.setScissorTest(true);
+//     if (viewerMode === "2d") {
+//         renderer.setScissorTest(true);
 
-        // --- NEW CALCULATIONS FOR THE 75/25 SPLIT ---
-        var rightWidth = 100; // Locked absolute width in pixels
-        var rightMargin = 100;
-        var leftWidth = width - (rightWidth + rightMargin); // Takes up all remaining screen space
+//         // --- NEW CALCULATIONS FOR THE 75/25 SPLIT ---
+//         var rightWidth = 100; // Locked absolute width in pixels
+//         var rightMargin = 100;
+//         var leftWidth = width - (rightWidth + rightMargin); // Takes up all remaining screen space
 
-        // --- LEFT PANEL: XY PLANE (75% WIDTH) ---
-        renderer.setViewport(0, 0, leftWidth, height);
-        renderer.setScissor(0, 0, leftWidth, height);
-        camera.aspect = leftWidth / height;
-        camera.updateProjectionMatrix();
-        renderer.render(scene, camera);
+//         // --- LEFT PANEL: XY PLANE (75% WIDTH) ---
+//         renderer.setViewport(0, 0, leftWidth, height);
+//         renderer.setScissor(0, 0, leftWidth, height);
+//         camera.aspect = leftWidth / height;
+//         camera.updateProjectionMatrix();
+//         renderer.render(scene, cameraXY);
 
-        // --- RIGHT PANEL: XZ PLANE PROFILE (25% WIDTH) ---
-        renderer.setViewport(leftWidth-rightMargin, 0, rightWidth, height);
-        renderer.setScissor(leftWidth-rightMargin, 0, rightWidth, height);
-        
-        /* 
-        * TRACKING THE CONE: Keep the XZ profile camera locked directly onto 
-        * the cone's real-time X and Z position as it changes depth.
-        */
-        if (typeof cone !== "undefined" && cone && cone.position) {
-            // Position camera looking straight down the Y axis, aligned with the cone
-            cameraXZ.position.set(cone.position.x, cone.position.y - 300, cone.position.z);
-            cameraXZ.lookAt(cone.position.x, cone.position.y, cone.position.z);
-        }
+//         // --- RIGHT PANEL: XZ PLANE PROFILE (25% WIDTH) ---
+//         renderer.setViewport(leftWidth-rightMargin, 0, rightWidth, height);
+//         renderer.setScissor(leftWidth-rightMargin, 0, rightWidth, height);
 
-        cameraXZ.aspect = rightWidth / height;
-        cameraXZ.updateProjectionMatrix();
-        renderer.render(scene, cameraXZ);
+//         /*
+//         * TRACKING THE CONE: Keep the XZ profile camera locked directly onto
+//         * the cone's real-time X and Z position as it changes depth.
+//         */
+//         if (typeof cone !== "undefined" && cone && cone.position) {
+//             // Position camera looking straight down the Y axis, aligned with the cone
+//             cameraXZ.position.set(cone.position.x, cone.position.y - 300, cone.position.z);
+//             cameraXZ.lookAt(cone.position.x, cone.position.y, cone.position.z);
+//         }
 
-        renderer.setScissorTest(false);
-    } else {
-        // Standard full canvas rendering for 3D mode
-        renderer.setViewport(0, 0, width, height);
-        renderer.render(scene, camera);
-    }
+//         cameraXZ.aspect = rightWidth / height;
+//         cameraXZ.updateProjectionMatrix();
+//         renderer.render(scene, cameraXZ);
+
+//         renderer.setScissorTest(false);
+//     } else {
+//         // Standard full canvas rendering for 3D mode
+//         renderer.setViewport(0, 0, width, height);
+//         renderer.render(scene, camera);
+//     }
+// }
+
+function performRender() {
+  if (!renderer || !scene || !camera || !cameraXZ || !cameraXY) return;
+
+  var renderArea = document.getElementById("renderArea");
+  if (!renderArea) return;
+
+  var width = renderArea.clientWidth;
+  var height = renderArea.clientHeight;
+
+  if (viewerMode === "2d") {
+      renderer.setScissorTest(true);
+
+      // --- CALCULATIONS FOR THE SPLIT HOUSINGS ---
+      var rightWidth = 100; // Locked absolute width in pixels
+      var rightMargin = 100;
+      var leftWidth = width - (rightWidth + rightMargin); // Left panel width
+
+
+
+      // --- LEFT PANEL: XY PLANE ---
+      renderer.setViewport(0, 0, leftWidth, height);
+      renderer.setScissor(0, 0, leftWidth, height);
+
+      var baseViewSize = 300; // Base size of the viewport machine workspace bounds
+      var aspectXY = leftWidth / height;
+
+      // FIX: Dynamically update the Orthographic bounds for cameraXY to match leftWidth
+      // This forces the viewport to maintain a 1:1 square aspect ratio without stretching lines.
+      var viewSize = 300; // Adjust this scale factor to change the default 2D viewport zoom coverage
+      var aspectXY = leftWidth / height;
+
+      // cameraXY.left = -viewSize * aspectXY / 2;
+      // cameraXY.right = viewSize * aspectXY / 2;
+      // cameraXY.top = viewSize / 2;
+      // cameraXY.bottom = -viewSize / 2;
+
+      // FIX: Multiply your boundaries by cameraXYZoomFactor to smoothly expand or contract the view frame
+      cameraXY.left = (-baseViewSize * aspectXY / 2) * cameraXYZoomFactor;
+      cameraXY.right = (baseViewSize * aspectXY / 2) * cameraXYZoomFactor;
+      cameraXY.top = (baseViewSize / 2) * cameraXYZoomFactor;
+      cameraXY.bottom = (-baseViewSize / 2) * cameraXYZoomFactor;
+
+      cameraXY.updateProjectionMatrix();
+      renderer.render(scene, cameraXY);
+
+      // --- RIGHT PANEL: XZ PLANE PROFILE ---
+      renderer.setViewport(leftWidth - rightMargin, 0, rightWidth, height);
+      renderer.setScissor(leftWidth - rightMargin, 0, rightWidth, height);
+
+      /*
+      * TRACKING THE CONE: Keep the XZ profile camera locked directly onto
+      * the cone's real-time X and Z position as it changes depth.
+      */
+      if (typeof cone !== "undefined" && cone && cone.position) {
+          // Position camera looking straight down the Y axis, aligned with the cone
+          cameraXZ.position.set(cone.position.x, cone.position.y - 300, cone.position.z);
+          cameraXZ.lookAt(cone.position.x, cone.position.y, cone.position.z);
+      }
+
+      cameraXZ.aspect = rightWidth / height;
+      cameraXZ.updateProjectionMatrix();
+      renderer.render(scene, cameraXZ);
+
+      renderer.setScissorTest(false);
+  } else {
+      // Standard full canvas rendering for 3D mode
+      renderer.setViewport(0, 0, width, height);
+      renderer.render(scene, camera);
+  }
 }
-
