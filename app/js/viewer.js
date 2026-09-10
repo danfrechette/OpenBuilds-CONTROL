@@ -12,8 +12,11 @@ var clock = new THREE.Clock();
 var marker;
 
 // Split-view coordinate picker state.
-var coordinatePickEnabled = false;
+var coordinateMode = null;
 var coordinatePickButton;
+var coordinateJogButton;
+var coordinateCancelButton;
+
 var coordinatePickMarker;
 var coordinateReadout;
 var sizexmax;
@@ -393,6 +396,11 @@ function init3D() {
       controls.enableKeys = false; // Disable Keyboard on canvas
     }
 
+    // Coordinate picker support
+    createCoordinatePickerUI();
+    installSplitViewInputGuard();
+    hideCoordinatePickerUI();
+
 
     //drawWorkspace(xmin, xmax, ymin, ymax)
     drawWorkspace(xmin, xmax, ymin, ymax);
@@ -403,9 +411,11 @@ function init3D() {
     raycaster.linePrecision = 1
 
     setTimeout(function() {
-      resetView()
+      set3DView();
+      resetView();
       animate();
-    }, 200)
+    }, 200);
+    updateViewerModeTabs();
 
   } else {
     console.log('No WebGL Support found on this computer! Disabled 3D Viewer - Sorry!');
@@ -443,86 +453,6 @@ function updateSplitCameraAspect(width, height) {
         cameraXY.updateProjectionMatrix();
     }
 }
-
-
-// function updateSplitCameraAspect(width, height) {
-
-//     var rightWidth = 140;
-//     var aspect = rightWidth / height;
-
-//     if (cameraZ) {
-//         cameraZ.aspect = aspect;
-//         cameraZ.updateProjectionMatrix();
-//     }
-
-//     if (cameraXY) {
-//         cameraXY.aspect = (width - rightWidth) / height;
-//         cameraXY.updateProjectionMatrix();
-//     }
-// }
-
-// function syncSplitCameras() {
-//   if (!cameraXY || !cameraZ) return;
-
-//   var target = (!disable3Dcontrols && controls) ? controls.target : new THREE.Vector3(0, 0, 0);
-
-//   // ==========================================
-//   // PANE 1: LEFT VIEWPORT (XY Plane - Slicing Layer)
-//   // ==========================================
-//   var distance = Math.max(10, camera.position.distanceTo(target));
-
-//   cameraXY.fov = camera.fov;
-//   cameraXY.position.set(target.x, target.y, target.z + distance);
-//   cameraXY.up.set(0, 1, 0);
-//   cameraXY.lookAt(target);
-
-//   var cursorDepthZ = 0;
-//   if (typeof cone !== 'undefined' && cone && cone.position) {
-//     cursorDepthZ = cone.position.z;
-//   }
-
-//   var totalSliceThickness = 2.0;
-//   var halfThickness = totalSliceThickness / 2;
-//   var distanceToCursorZ = cameraXY.position.z - cursorDepthZ;
-
-//   cameraXY.near = Math.max(0.1, distanceToCursorZ - halfThickness);
-//   cameraXY.far = distanceToCursorZ + halfThickness;
-
-//   cameraXY.updateProjectionMatrix();
-//   cameraXY.updateMatrixWorld();
-
-
-//   // ==========================================
-//   // PANE 2: RIGHT VIEWPORT (XZ Depth Profile - Y REMOVED)
-//   // ==========================================
-//   var depthTarget = target.clone();
-//   if (typeof cone !== 'undefined' && cone && cone.position) {
-//     depthTarget.x = cone.position.x;
-//     depthTarget.z = cone.position.z;
-//   }
-
-//   var depthDistance = 1000;
-
-//   // FIX: Force Y to a static 0 coordinate for both the camera placement and its focal target point.
-//   // This removes any angle changes or shifting caused by tool movement along the Y axis.
-//   cameraZ.position.set(
-//     depthTarget.x,
-//     0 - depthDistance, // Locked static Y plane perspective
-//     depthTarget.z
-//   );
-
-//   cameraZ.up.set(0, 0, 1);
-
-//   // Look at the tool position projected flatly onto the Y=0 plane
-//   cameraZ.lookAt(new THREE.Vector3(depthTarget.x, 0, depthTarget.z));
-
-//   // Broad clipping boundaries so X and Z lines are always seen clearly
-//   cameraZ.near = -2000;
-//   cameraZ.far = 2000;
-
-//   cameraZ.updateProjectionMatrix();
-//   cameraZ.updateMatrixWorld();
-// }
 
 function syncSplitCameras() {
   if (!cameraXY || !cameraZ) return;
@@ -581,9 +511,7 @@ function syncSplitCameras() {
 function renderSplitView() {
   var width = renderer.domElement.clientWidth;
   var height = renderer.domElement.clientHeight;
-  // var leftWidth = Math.floor(width / 2);
-  // var rightWidth = width - leftWidth;
-
+  
   var rightWidth = 140;
   var leftWidth = width - rightWidth;
 
@@ -605,9 +533,7 @@ function createCoordinatePickerUI() {
   var renderArea = document.getElementById('renderArea');
   if (!renderArea || coordinatePickButton) return;
 
-  if (window.getComputedStyle(renderArea).position === 'static') {
-    renderArea.style.position = 'relative';
-  }
+  if (window.getComputedStyle(renderArea).position === 'static') { renderArea.style.position = 'relative'; }
 
   coordinatePickButton = document.createElement('button');
   coordinatePickButton.type = 'button';
@@ -625,6 +551,37 @@ function createCoordinatePickerUI() {
   ].join(';');
   coordinatePickButton.addEventListener('click', enableCoordinatePick);
   renderArea.appendChild(coordinatePickButton);
+
+  coordinateJogButton = document.createElement('button');
+  coordinateJogButton.type = 'button';
+  coordinateJogButton.id = 'coordinateJogButton';
+  coordinateJogButton.title = 'Jog to an XY coordinate';
+  coordinateJogButton.setAttribute('aria-label', 'Jog to an XY coordinate');
+  coordinateJogButton.innerHTML = '&#128205;';
+  coordinateJogButton.style.cssText = [
+    'position:absolute', 'left:12px', 'top:60px', 'z-index:20',
+    'width:38px', 'height:38px', 'padding:0', 'border:1px solid #666',
+    'border-radius:4px', 'background:#ffffff', 'color:#222',
+    'font-size:20px', 'line-height:34px', 'cursor:pointer',
+    'box-shadow:0 1px 4px rgba(0,0,0,.35)'
+  ].join(';');
+  coordinateJogButton.addEventListener('click', enableCoordinateJog);
+  renderArea.appendChild(coordinateJogButton);
+
+  coordinateCancelButton = document.createElement('button');
+  coordinateCancelButton.type = 'button';
+  coordinateCancelButton.id = 'coordinateCancelButton';
+  coordinateCancelButton.innerHTML = '?';
+  coordinateCancelButton.title = 'Cancel';
+  coordinateCancelButton.style.cssText = [
+    'position:absolute','left:12px','top:108px','z-index:20',
+    'width:38px','height:38px','padding:0','border:1px solid #666',
+    'border-radius:4px','background:#ffffff','color:#222',
+    'font-size:18px','cursor:pointer',
+    'box-shadow:0 1px 4px rgba(0,0,0,.35)'
+  ].join(';');
+  coordinateCancelButton.addEventListener('click',cancelCoordinateMode);
+  renderArea.appendChild(coordinateCancelButton);
 
   coordinateReadout = document.createElement('div');
   coordinateReadout.id = 'coordinateReadout';
@@ -649,70 +606,197 @@ function createCoordinatePickerUI() {
 }
 
 function enableCoordinatePick(event) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
 
-  coordinatePickEnabled = true;
-  if (!disable3Dcontrols && controls) controls.enabled = false;
-  renderer.domElement.style.cursor = 'crosshair';
-  coordinatePickButton.style.background = '#d9edf7';
-  coordinateReadout.textContent = 'Click a point in the XY view';
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    coordinateMode = "pick";
+
+    coordinatePickButton.style.background = '#d9edf7';
+    coordinateJogButton.style.background = '#ffffff';
+
+    if (!disable3Dcontrols && controls) {
+        controls.enabled = false;
+    }
+
+    renderer.domElement.style.cursor = 'crosshair';
+
+    coordinateReadout.textContent =
+        'Click a point in the XY view';
+}
+
+function enableCoordinateJog(event) {
+
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    coordinateMode = "jog";
+
+    coordinatePickButton.style.background = '#ffffff';
+    coordinateJogButton.style.background = '#d9edf7';
+
+    if (!disable3Dcontrols && controls) {
+        controls.enabled = false;
+    }
+
+    renderer.domElement.style.cursor = 'crosshair';
+
+    coordinateReadout.textContent =
+        'Click a point to jog to';
 }
 
 function disableCoordinatePick() {
-  coordinatePickEnabled = false;
+  coordinateMode = null;
   if (!disable3Dcontrols && controls) controls.enabled = true;
   renderer.domElement.style.cursor = '';
 
-  if (coordinatePickButton) coordinatePickButton.style.background = '#ffffff';
+  if (coordinatePickButton) {
+    coordinatePickButton.style.background = '#ffffff';
+  }
+
+  if (coordinateJogButton) {
+    coordinateJogButton.style.background = '#ffffff';
+  }
 }
 
 function onCoordinateGridClick(event) {
-  if (!coordinatePickEnabled) return;
+
+  if (coordinateMode === null || viewerMode !== "2d") { return; }
 
   var rect = renderer.domElement.getBoundingClientRect();
   var localX = event.clientX - rect.left;
   var localY = event.clientY - rect.top;
-  var rightWidth = 140;
-  var leftWidth = rect.width - rightWidth;
 
-  // Coordinate selection is only available in the left XY viewport.
-  if (localX < 0 || localX >= leftWidth || localY < 0 || localY > rect.height) return;
+  var rightWidth = 100;
+  var rightMargin = 100;
+  var leftWidth = rect.width - (rightWidth + rightMargin);
+
+  if (
+    localX < 0 ||
+    localX >= leftWidth ||
+    localY < 0 ||
+    localY >= rect.height
+  ) {
+    return;
+  }
 
   var mouse = new THREE.Vector2(
     (localX / leftWidth) * 2 - 1,
     -(localY / rect.height) * 2 + 1
   );
 
+  cameraXY.updateProjectionMatrix();
+  cameraXY.updateMatrixWorld(true);
+
   raycaster.setFromCamera(mouse, cameraXY);
 
-  // Intersect the click ray with the machine's XY plane at Z = 0.
-  var xyPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  var point = new THREE.Vector3();
-  if (!raycaster.ray.intersectPlane(xyPlane, point)) return;
+  var xyPlane = new THREE.Plane(
+    new THREE.Vector3(0, 0, 1),
+    0
+  );
 
+  var point = new THREE.Vector3();
+
+  if (!raycaster.ray.intersectPlane(xyPlane, point)) {
+    return;
+  }
+
+  /*
+   * Select the appropriate snapping increment.
+   *
+   * Metric: 5 mm
+   * Inch:   1/8 inch, stored internally as 3.175 mm
+   */
+  var increment;
+
+  if (localStorage.getItem("unitsMode") === "in") {
+    increment = 25.4 / 8;
+  } else {
+    increment = 5;
+  }
+
+  var xRounded = Math.round(point.x / increment) * increment;
+  var yRounded = Math.round(point.y / increment) * increment;
+
+  /*
+   * Avoid displaying negative zero.
+   */
+  if (Math.abs(xRounded) < 0.0005) xRounded = 0;
+  if (Math.abs(yRounded) < 0.0005) yRounded = 0;
+
+  /*
+   * Create the red marker once.
+   */
   if (!coordinatePickMarker) {
     coordinatePickMarker = new THREE.Mesh(
       new THREE.SphereGeometry(2, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false })
+      new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        depthTest: false
+      })
     );
-    coordinatePickMarker.name = 'Selected XY Coordinate';
+
+    coordinatePickMarker.name = "Selected XY Coordinate";
     coordinatePickMarker.renderOrder = 999;
     scene.add(coordinatePickMarker);
   }
-  coordinatePickMarker.position.set(point.x, point.y, 0.2);
+
+  /*
+   * Put the marker at the rounded coordinate, not the original
+   * unsnapped mouse coordinate.
+   */
+  coordinatePickMarker.position.set(
+    xRounded,
+    yRounded,
+    0.2
+  );
+
   coordinatePickMarker.visible = true;
 
-  var xText = point.x.toFixed(3);
-  var yText = point.y.toFixed(3);
-  coordinateReadout.textContent = 'X: ' + xText + '  Y: ' + yText;
+  var xText = xRounded.toFixed(3);
+  var yText = yRounded.toFixed(3);
 
-  // alert() is synchronous. Normal OrbitControls are restored immediately
-  // after the user acknowledges the coordinate message.
-  window.alert('Selected coordinate\nX: ' + xText + '\nY: ' + yText);
+  switch (coordinateMode){
+    case "pick":
+      coordinateReadout.textContent ="X: " + xText + "  Y: " + yText;
+      window.alert( "Selected coordinate\n" + "X: " + xText + "\n" + "Y: " + yText );
+      coordinatePickMarker.visible = false;
+      break;
+    case "jog":
+      jogToCoordinate(xRounded, yRounded);
+      coordinatePickMarker.visible = false;
+      break;
+    default:
+      console.log("No mode selected");
+      break;
+  }
+  
   disableCoordinatePick();
+
+  if (typeof performRender === "function") {
+    performRender();
+  }
+}
+
+function cancelCoordinateMode() {
+  coordinateMode = null;   
+  if (coordinatePickMarker) {
+    coordinatePickMarker.visible = false;
+  }
+  
+  if (!disable3Dcontrols && controls) {
+      controls.enabled = true;
+  }
+
+  renderer.domElement.style.cursor = '';
+
+  coordinatePickButton.style.background = '#ffffff';
+  coordinateJogButton.style.background = '#ffffff';
+
+  coordinateReadout.textContent = 'XY view';
 }
 
 function installSplitViewInputGuard() {
@@ -1060,20 +1144,6 @@ function drawMachineCoordinates(status) {
     set3DView();
   });
 
-  // function refreshViewerSize() {
-  //     window.setTimeout(function () {
-  //         fixRenderSize();
-
-  //         if (typeof renderer !== "undefined" &&
-  //             typeof scene !== "undefined" &&
-  //             typeof camera !== "undefined") {
-  //             renderer.render(scene, camera);
-  //         }
-  //     }, 50);
-
-  //     updateViewerModeTabs();
-  // }
-
   function refreshViewerSize() {
       window.setTimeout(function () {
           var viewer = document.getElementById("renderArea");
@@ -1147,7 +1217,9 @@ function drawMachineCoordinates(status) {
       cameraXY.updateProjectionMatrix();
       controls.update();
 
+      showCoordinatePickerUI();
       refreshViewerSize();
+      
   }
 
   function save3DView() {
@@ -1170,6 +1242,13 @@ function drawMachineCoordinates(status) {
     }
 
     viewerMode = "3d";
+    $("#view2dtab").removeClass("active");
+    $("#view3dtab").addClass("active");
+
+    if (coordinatePickMarker) {
+      coordinatePickMarker.visible = false;
+    }
+    hideCoordinatePickerUI();
 
     controls.enableRotate = true;
     controls.enablePan = true;
@@ -1200,56 +1279,6 @@ function drawMachineCoordinates(status) {
     controls.update();
     refreshViewerSize();
   }
-
-//   function performRender() {
-//     if (!renderer || !scene || !camera || !cameraXZ || !cameraXY) return;
-
-//     var renderArea = document.getElementById("renderArea");
-//     if (!renderArea) return;
-
-//     var width = renderArea.clientWidth;
-//     var height = renderArea.clientHeight;
-
-//     if (viewerMode === "2d") {
-//         renderer.setScissorTest(true);
-
-//         // --- NEW CALCULATIONS FOR THE 75/25 SPLIT ---
-//         var rightWidth = 100; // Locked absolute width in pixels
-//         var rightMargin = 100;
-//         var leftWidth = width - (rightWidth + rightMargin); // Takes up all remaining screen space
-
-//         // --- LEFT PANEL: XY PLANE (75% WIDTH) ---
-//         renderer.setViewport(0, 0, leftWidth, height);
-//         renderer.setScissor(0, 0, leftWidth, height);
-//         camera.aspect = leftWidth / height;
-//         camera.updateProjectionMatrix();
-//         renderer.render(scene, cameraXY);
-
-//         // --- RIGHT PANEL: XZ PLANE PROFILE (25% WIDTH) ---
-//         renderer.setViewport(leftWidth-rightMargin, 0, rightWidth, height);
-//         renderer.setScissor(leftWidth-rightMargin, 0, rightWidth, height);
-
-//         /*
-//         * TRACKING THE CONE: Keep the XZ profile camera locked directly onto
-//         * the cone's real-time X and Z position as it changes depth.
-//         */
-//         if (typeof cone !== "undefined" && cone && cone.position) {
-//             // Position camera looking straight down the Y axis, aligned with the cone
-//             cameraXZ.position.set(cone.position.x, cone.position.y - 300, cone.position.z);
-//             cameraXZ.lookAt(cone.position.x, cone.position.y, cone.position.z);
-//         }
-
-//         cameraXZ.aspect = rightWidth / height;
-//         cameraXZ.updateProjectionMatrix();
-//         renderer.render(scene, cameraXZ);
-
-//         renderer.setScissorTest(false);
-//     } else {
-//         // Standard full canvas rendering for 3D mode
-//         renderer.setViewport(0, 0, width, height);
-//         renderer.render(scene, camera);
-//     }
-// }
 
 function performRender() {
   if (!renderer || !scene || !camera || !cameraXZ || !cameraXY) return;
@@ -1320,4 +1349,121 @@ function performRender() {
       renderer.setViewport(0, 0, width, height);
       renderer.render(scene, camera);
   }
+}
+
+function showCoordinatePickerUI() {
+    if (!coordinatePickButton) {
+        createCoordinatePickerUI();
+    }
+
+    if (coordinatePickButton) {
+        coordinatePickButton.style.display = '';
+        coordinateJogButton.style.display = '';
+        coordinateCancelButton.style.display = '';
+    }
+
+    if (coordinateReadout) {
+        coordinateReadout.style.display = '';
+    }
+}
+
+function hideCoordinatePickerUI() {
+    disableCoordinatePick();
+
+    if (coordinatePickButton) {
+        coordinatePickButton.style.display = 'none';
+        coordinateJogButton.style.display = 'none';
+        coordinateCancelButton.style.display = 'none';
+    }
+
+    if (coordinateReadout) {
+        coordinateReadout.style.display = 'none';
+    }
+}
+
+function jogToCoordinate(x, y) {
+
+  // Safety clearance in work coordinates, millimeters.
+  // Change this to the clearance required for your machine.
+  var safeZ = 5;
+
+  x = Number(x);
+  y = Number(y);
+
+  // Validate the destination.
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    console.error("Invalid jog coordinate:", x, y);
+    return;
+  }
+
+  // Confirm that current controller status is available.
+  if (
+    typeof laststatus === "undefined" ||
+    !laststatus ||
+    !laststatus.comms ||
+    !laststatus.machine ||
+    !laststatus.machine.position ||
+    !laststatus.machine.position.work
+  ) {
+    console.error("Machine status is not available.");
+    return;
+  }
+
+  // OpenBuilds reports an active controller connection as status 2.
+  var connectionIsActive =
+    laststatus.comms.connectionStatus === 2 &&
+    laststatus.comms.interfaces &&
+    laststatus.comms.interfaces.activePort;
+
+  if (!connectionIsActive) {
+    console.error("Cannot jog because the controller is not connected.");
+
+    if (typeof Metro !== "undefined" && Metro.toast) {
+      Metro.toast.create(
+        "Connect to the controller before jogging.",
+        null,
+        2000,
+        "bg-darkRed fg-white"
+      );
+    }
+
+    return;
+  }
+
+  // Do not start movement while another operation is active.
+  if (laststatus.comms.runStatus !== "Idle") {
+    if (typeof toastJogNotIdle === "function") {
+      toastJogNotIdle();
+    } else {
+      console.error(
+        "Cannot jog while machine status is:",
+        laststatus.comms.runStatus
+      );
+    }
+
+    return;
+  }
+
+  var currentZ = Number(laststatus.machine.position.work.z);
+
+  if (!Number.isFinite(currentZ)) {
+    console.error("Current Z position is not available.");
+    return;
+  }
+
+  var moves = "G21\nG90\n";
+
+  if (currentZ < 0) {
+    moves += "G0 Z" + safeZ.toFixed(3) + "\n";
+  }
+
+  moves += "G0 X" + x.toFixed(3) +" Y" + y.toFixed(3) + " F" + Math.min(jogRateX, jogRateY) + "\n";
+
+  console.log("Coordinate move command:\n" + moves);
+
+  socket.emit("runJob", {
+    data: moves,
+    isJob: false,
+    fileName: ""
+  });
 }

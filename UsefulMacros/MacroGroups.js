@@ -37,6 +37,43 @@ function SanitizeGroupName(string)
 	return string.replaceAll('&', ' ').replaceAll('<', ' ').replaceAll('>', ' ').replaceAll('"', ' ').replaceAll("'", ' ');
 }
 
+// PERSISTENCE FIX: Save groupings mapping macro name to its group name
+function SaveMacroGroupMap()
+{
+	var map = {};
+	for (var i = 0; i < buttonsarray.length; i++)
+	{
+		if (buttonsarray[i].name && buttonsarray[i].group)
+		{
+			map[buttonsarray[i].name] = buttonsarray[i].group;
+		}
+	}
+	localStorage.setItem("MacroGroupAssignments", JSON.stringify(map));
+}
+
+// PERSISTENCE FIX: Load groupings maps back onto macro array items
+function LoadMacroGroupMap()
+{
+	var stored = localStorage.getItem("MacroGroupAssignments");
+	if (stored)
+	{
+		try {
+			var map = JSON.parse(stored);
+			for (var i = 0; i < buttonsarray.length; i++)
+			{
+				if (buttonsarray[i].name && map[buttonsarray[i].name])
+				{
+					buttonsarray[i].group = map[buttonsarray[i].name];
+				}
+				else if (buttonsarray[i].group == undefined)
+				{
+					buttonsarray[i].group = "";
+				}
+			}
+		} catch(e) { console.error("Error loading macro group assignments", e); }
+	}
+}
+
 // Cleans up old instance of the plugin. useful when iterating on the code
 function CleanupOldVersion()
 {
@@ -169,6 +206,7 @@ function RenameGroup(groupIdx, newName)
 		}
 	}
 
+	SaveMacroGroupMap(); // Save mapping change
 	RebuildGroupUI();
 }
 
@@ -338,14 +376,22 @@ function OnMacrosChanged()
 		}
 	}
 
-	// capture new button order
+	// Capture and apply assigned groups to newly tracked elements
 	g_ButtonsCopy = [];
+
+	var mapStored = localStorage.getItem("MacroGroupAssignments");
+	var map = mapStored ? JSON.parse(mapStored) : {};
+	
 	for (var i = 0; i < buttonsarray.length; i++)
 	{
 		var button = buttonsarray[i];
 		g_ButtonsCopy.push(button);
 
-		// move newly created buttons to the current group
+		// If a button lost its group due to backend cleanup, restore it from our custom map
+		if (button.name && map[button.name]) {
+			button.group = map[button.name];
+		}
+
 		if (button.group == undefined)
 		{
 			var activeIdx = g_TabVisibility == 0 ? 0 : Math.max(0, g_GroupsLower.indexOf(g_CurrentGroupLower));
