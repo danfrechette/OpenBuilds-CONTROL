@@ -1,13 +1,11 @@
 // Global Vars
 var scene = true;
 var camera, renderer;
-var camera, renderer;
 var projector, mouseVector, containerWidth, containerHeight;
 var raycaster = new THREE.Raycaster();
 var gridsystem = new THREE.Group();
 
 var container, stats;
-var controls, control, gridsystem, helper;
 var controls, control, gridsystem, helper;
 var clock = new THREE.Clock();
 
@@ -19,15 +17,11 @@ var coordinatePickButton;
 var coordinateJogButton;
 var coordinateCancelButton;
 
-var coordinateJogButton;
-var coordinateCancelButton;
-
 var coordinatePickMarker;
 var coordinateReadout;
 var sizexmax;
 var sizeymax;
 var lineincrement = 50
-var cameraXYZoomFactor = 1.0;
 var cameraXYZoomFactor = 1.0;
 var camvideo;
 var objectsInScene = []; //array that holds all objects we added to the scene.
@@ -63,6 +57,7 @@ var machineCoordinateSpace = false;
 var viewerMode = "3d";
 var saved3DView = null;
 var cameraXZ;
+var depthLabel;
 
 function drawWorkspace(xmin, xmax, ymin, ymax) {
 
@@ -132,7 +127,6 @@ function drawWorkspace(xmin, xmax, ymin, ymax) {
       }
     };
 
-    uniforms.topColor.value.copy(hemiLight.color);
     uniforms.topColor.value.copy(hemiLight.color);
     scene.fog.color.copy(uniforms.bottomColor.value);
 
@@ -375,43 +369,12 @@ function init3D() {
     }, { passive: false });
     // ========================================================
 
-    //cameraXZ = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
-    cameraXZ = new THREE.OrthographicCamera(-50, 50, 100, -100, 1, 1000);
-    cameraXY = new THREE.OrthographicCamera(-100, 100, 100, -100, 1, 20000);
-
-    $('#renderArea').append(renderer.domElement);
-
-    // ========================================================
-    // ADDED: 2D Orthographic Zoom Event Listener
-    // ========================================================
-    renderer.domElement.addEventListener('wheel', function(event) {
-      if (viewerMode === "2d") {
-        // Stop the default browser scroll and background OrbitControls zooms
-        event.preventDefault();
-        event.stopPropagation();
-
-        // Determine zoom scale based on wheel spin direction
-        var zoomDelta = event.deltaY > 0 ? 1.1 : 0.9;
-        cameraXYZoomFactor *= zoomDelta;
-
-        // Apply clamping limits so the user can't zoom into infinity
-        cameraXYZoomFactor = Math.max(0.05, Math.min(cameraXYZoomFactor, 25.0));
-
-        // Fire a render pass to visually apply the update instantly
-        if (typeof performRender === "function") {
-            performRender();
-        }
-      }
-    }, { passive: false });
-    // ========================================================
-
     renderer.setClearColor(0xffffff, 1); // Background color of viewer = transparent
     // renderer.setSize(window.innerWidth - 10, window.innerHeight - 10);
     renderer.clear();
 
     sceneWidth = document.getElementById("renderArea").offsetWidth,
       sceneHeight = document.getElementById("renderArea").offsetHeight;
-    camera.aspect = sceneWidth / sceneHeight;
     camera.aspect = sceneWidth / sceneHeight;
     renderer.setSize(sceneWidth, sceneHeight)
     camera.updateProjectionMatrix();
@@ -435,12 +398,9 @@ function init3D() {
     }
 
     // Coordinate picker support
-    // Coordinate picker support
     createCoordinatePickerUI();
     updateCoordinateButtonTheme();
     installSplitViewInputGuard();
-    hideCoordinatePickerUI();
-
     hideCoordinatePickerUI();
 
 
@@ -455,11 +415,7 @@ function init3D() {
     setTimeout(function() {
       set3DView();
       resetView();
-      set3DView();
-      resetView();
       animate();
-    }, 200);
-    updateViewerModeTabs();
     }, 200);
     updateViewerModeTabs();
 
@@ -477,26 +433,11 @@ function init3D() {
 function updateSplitCameraAspect(width, height) {
     var rightWidth = 140;
     var aspectZ = rightWidth / height;
-    var aspectZ = rightWidth / height;
 
     if (cameraZ) {
         cameraZ.aspect = aspectZ;
-        cameraZ.aspect = aspectZ;
         cameraZ.updateProjectionMatrix();
     }
-
-    // UPDATE THIS: Adjust orthographic bounds for cameraXY to prevent stretching
-    if (cameraXY && cameraXY.isOrthographicCamera) {
-        var leftWidth = width - rightWidth;
-
-        // Choose a view factor/frustum size (adjust this number to change default zoom level)
-        var viewSize = 300;
-        var aspectXY = leftWidth / height;
-
-        cameraXY.left = -viewSize * aspectXY / 2;
-        cameraXY.right = viewSize * aspectXY / 2;
-        cameraXY.top = viewSize / 2;
-        cameraXY.bottom = -viewSize / 2;
 
     // UPDATE THIS: Adjust orthographic bounds for cameraXY to prevent stretching
     if (cameraXY && cameraXY.isOrthographicCamera) {
@@ -523,13 +464,7 @@ function syncSplitCameras() {
   // ==========================================
   // PANE 1: LEFT VIEWPORT (Pure Orthographic XY Plane)
   // ==========================================
-
-  // ==========================================
-  // PANE 1: LEFT VIEWPORT (Pure Orthographic XY Plane)
-  // ==========================================
   var distance = Math.max(10, camera.position.distanceTo(target));
-
-  // REMOVED: cameraXY.fov = camera.fov (Not used in Orthographic)
 
   // REMOVED: cameraXY.fov = camera.fov (Not used in Orthographic)
 
@@ -550,31 +485,13 @@ function syncSplitCameras() {
   cameraXY.near = Math.max(0.1, distanceToCursorZ - halfThickness);
   cameraXY.far = distanceToCursorZ + halfThickness;
 
-
-  // Slicing logic remains identical
-  var cursorDepthZ = 0;
-  if (typeof cone !== 'undefined' && cone && cone.position) {
-    cursorDepthZ = cone.position.z;
-  }
-
-  var totalSliceThickness = 2.0;
-  var halfThickness = totalSliceThickness / 2;
-  var distanceToCursorZ = cameraXY.position.z - cursorDepthZ;
-
-  cameraXY.near = Math.max(0.1, distanceToCursorZ - halfThickness);
-  cameraXY.far = distanceToCursorZ + halfThickness;
-
   cameraXY.updateProjectionMatrix();
   cameraXY.updateMatrixWorld();
 
   // ==========================================
   // PANE 2: RIGHT VIEWPORT (XZ Depth Profile - Kept Same)
   // ==========================================
-  // ==========================================
-  // PANE 2: RIGHT VIEWPORT (XZ Depth Profile - Kept Same)
-  // ==========================================
   var depthTarget = target.clone();
-  if (typeof cone !== 'undefined' && cone && cone.position) {
   if (typeof cone !== 'undefined' && cone && cone.position) {
     depthTarget.x = cone.position.x;
     depthTarget.z = cone.position.z;
@@ -582,13 +499,7 @@ function syncSplitCameras() {
 
   var depthDistance = 1000;
   cameraZ.position.set(depthTarget.x, 0 - depthDistance, depthTarget.z);
-  cameraZ.position.set(depthTarget.x, 0 - depthDistance, depthTarget.z);
   cameraZ.up.set(0, 0, 1);
-  cameraZ.lookAt(new THREE.Vector3(depthTarget.x, 0, depthTarget.z));
-
-  cameraZ.near = -2000;
-  cameraZ.far = 2000;
-
   cameraZ.lookAt(new THREE.Vector3(depthTarget.x, 0, depthTarget.z));
 
   cameraZ.near = -2000;
@@ -602,7 +513,6 @@ function syncSplitCameras() {
 function renderSplitView() {
   var width = renderer.domElement.clientWidth;
   var height = renderer.domElement.clientHeight;
-  
   
   var rightWidth = 140;
   var leftWidth = width - rightWidth;
@@ -625,7 +535,6 @@ function createCoordinatePickerUI() {
   var renderArea = document.getElementById('renderArea');
   if (!renderArea || coordinatePickButton) return;
 
-  if (window.getComputedStyle(renderArea).position === 'static') { renderArea.style.position = 'relative'; }
   if (window.getComputedStyle(renderArea).position === 'static') { renderArea.style.position = 'relative'; }
 
   coordinatePickButton = document.createElement('button');
@@ -707,45 +616,6 @@ function enableCoordinatePick(event) {
     }
     coordinateMode = "pick";
 
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    coordinateMode = "pick";
-
-    coordinatePickButton.style.background = '#d9edf7';
-    coordinateJogButton.style.background = '#ffffff';
-
-    if (!disable3Dcontrols && controls) {
-        controls.enabled = false;
-    }
-
-    renderer.domElement.style.cursor = 'crosshair';
-
-    coordinateReadout.textContent =
-        'Click a point in the XY view';
-}
-
-function enableCoordinateJog(event) {
-
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-
-    coordinateMode = "jog";
-
-    coordinatePickButton.style.background = '#ffffff';
-    coordinateJogButton.style.background = '#d9edf7';
-
-    if (!disable3Dcontrols && controls) {
-        controls.enabled = false;
-    }
-
-    renderer.domElement.style.cursor = 'crosshair';
-
-    coordinateReadout.textContent =
-        'Click a point to jog to';
     coordinatePickButton.style.background = '#d9edf7';
     coordinateJogButton.style.background = '#ffffff';
 
@@ -793,18 +663,9 @@ function disableCoordinatePick() {
   if (coordinateJogButton) {
     coordinateJogButton.style.background = '#ffffff';
   }
-  if (coordinatePickButton) {
-    coordinatePickButton.style.background = '#ffffff';
-  }
-
-  if (coordinateJogButton) {
-    coordinateJogButton.style.background = '#ffffff';
-  }
 }
 
 function onCoordinateGridClick(event) {
-
-  if (coordinateMode === null || viewerMode !== "2d") { return; }
 
   if (coordinateMode === null || viewerMode !== "2d") { return; }
 
@@ -812,19 +673,6 @@ function onCoordinateGridClick(event) {
 
   var localX = event.clientX - rect.left;
   var localY = event.clientY - rect.top;
-
-  var rightWidth = 100;
-  var rightMargin = 100;
-  var leftWidth = rect.width - (rightWidth + rightMargin);
-
-  if (
-    localX < 0 ||
-    localX >= leftWidth ||
-    localY < 0 ||
-    localY >= rect.height
-  ) {
-    return;
-  }
 
   var rightWidth = 100;
   var rightMargin = 100;
@@ -847,15 +695,7 @@ function onCoordinateGridClick(event) {
   cameraXY.updateProjectionMatrix();
   cameraXY.updateMatrixWorld(true);
 
-  cameraXY.updateProjectionMatrix();
-  cameraXY.updateMatrixWorld(true);
-
   raycaster.setFromCamera(mouse, cameraXY);
-
-  var xyPlane = new THREE.Plane(
-    new THREE.Vector3(0, 0, 1),
-    0
-  );
 
   var xyPlane = new THREE.Plane(
     new THREE.Vector3(0, 0, 1),
@@ -894,37 +734,6 @@ function onCoordinateGridClick(event) {
   /*
    * Create the red marker once.
    */
-
-  if (!raycaster.ray.intersectPlane(xyPlane, point)) {
-    return;
-  }
-
-  /*
-   * Select the appropriate snapping increment.
-   *
-   * Metric: 5 mm
-   * Inch:   1/8 inch, stored internally as 3.175 mm
-   */
-  var increment;
-
-  if (localStorage.getItem("unitsMode") === "in") {
-    increment = 25.4 / 8;
-  } else {
-    increment = 5;
-  }
-
-  var xRounded = Math.round(point.x / increment) * increment;
-  var yRounded = Math.round(point.y / increment) * increment;
-
-  /*
-   * Avoid displaying negative zero.
-   */
-  if (Math.abs(xRounded) < 0.0005) xRounded = 0;
-  if (Math.abs(yRounded) < 0.0005) yRounded = 0;
-
-  /*
-   * Create the red marker once.
-   */
   if (!coordinatePickMarker) {
     coordinatePickMarker = new THREE.Mesh(
       new THREE.SphereGeometry(2, 16, 16),
@@ -932,30 +741,13 @@ function onCoordinateGridClick(event) {
         color: 0xff0000,
         depthTest: false
       })
-      new THREE.MeshBasicMaterial({
-        color: 0xff0000,
-        depthTest: false
-      })
     );
-
-    coordinatePickMarker.name = "Selected XY Coordinate";
 
     coordinatePickMarker.name = "Selected XY Coordinate";
     coordinatePickMarker.renderOrder = 999;
 
     scene.add(coordinatePickMarker);
   }
-
-  /*
-   * Put the marker at the rounded coordinate, not the original
-   * unsnapped mouse coordinate.
-   */
-  coordinatePickMarker.position.set(
-    xRounded,
-    yRounded,
-    0.2
-  );
-
 
   /*
    * Put the marker at the rounded coordinate, not the original
@@ -987,47 +779,7 @@ function onCoordinateGridClick(event) {
       break;
   }
   
-  var xText = xRounded.toFixed(3);
-  var yText = yRounded.toFixed(3);
-
-  switch (coordinateMode){
-    case "pick":
-      coordinateReadout.textContent ="X: " + xText + "  Y: " + yText;
-      window.alert( "Selected coordinate\n" + "X: " + xText + "\n" + "Y: " + yText );
-      coordinatePickMarker.visible = false;
-      break;
-    case "jog":
-      jogToCoordinate(xRounded, yRounded);
-      coordinatePickMarker.visible = false;
-      break;
-    default:
-      console.log("No mode selected");
-      break;
-  }
-  
   disableCoordinatePick();
-
-  if (typeof performRender === "function") {
-    performRender();
-  }
-}
-
-function cancelCoordinateMode() {
-  coordinateMode = null;   
-  if (coordinatePickMarker) {
-    coordinatePickMarker.visible = false;
-  }
-  
-  if (!disable3Dcontrols && controls) {
-      controls.enabled = true;
-  }
-
-  renderer.domElement.style.cursor = '';
-
-  coordinatePickButton.style.background = '#ffffff';
-  coordinateJogButton.style.background = '#ffffff';
-
-  coordinateReadout.textContent = 'XY view';
 
   if (typeof performRender === "function") {
     performRender();
@@ -1098,8 +850,6 @@ function animate() {
       requestAnimationFrame(animate);
     }, 60);
 
-    //renderer.render(scene, camera);
-    performRender();
     //renderer.render(scene, camera);
     performRender();
   }
@@ -1279,39 +1029,6 @@ function fixRenderSize() {
       renderer.render(scene, camera);
     }
   }, 50);
-  if (!renderer || !camera) {
-    return;
-  }
-
-  setTimeout(function () {
-    var renderArea = document.getElementById("renderArea");
-
-    if (!renderArea) {
-      console.error("Unable to resize viewer: #renderArea was not found.");
-      return;
-    }
-
-    var sceneWidth = renderArea.clientWidth;
-    var sceneHeight = renderArea.clientHeight;
-
-    // Do not resize while the tab is hidden.
-    if (sceneWidth <= 0 || sceneHeight <= 0) {
-      return;
-    }
-
-    renderer.setSize(sceneWidth, sceneHeight);
-
-    camera.aspect = sceneWidth / sceneHeight;
-    camera.updateProjectionMatrix();
-
-    if (controls) {
-      controls.update();
-    }
-
-    if (scene) {
-      renderer.render(scene, camera);
-    }
-  }, 50);
 }
 
 $(window).on('resize', function() {
@@ -1347,15 +1064,7 @@ function drawMachineCoordinates(status) {
       var machineCoordinatesBoxMaxX = status.machine.position.work.x - status.machine.position.offset.x
       var machineCoordinatesBoxMaxY = status.machine.position.work.y - status.machine.position.offset.y
       var machineCoordinatesBoxMaxZ = status.machine.position.work.z - status.machine.position.offset.z
-    if (laststatus != undefined && grblParams.$130 !== undefined && grblParams.$131 !== undefined && grblParams.$132 !== undefined)
-    {
-      var machineCoordinatesBoxMaxX = status.machine.position.work.x - status.machine.position.offset.x
-      var machineCoordinatesBoxMaxY = status.machine.position.work.y - status.machine.position.offset.y
-      var machineCoordinatesBoxMaxZ = status.machine.position.work.z - status.machine.position.offset.z
 
-      var machineCoordinatesBoxMinX = machineCoordinatesBoxMaxX - grblParams.$130
-      var machineCoordinatesBoxMinY = machineCoordinatesBoxMaxY - grblParams.$131
-      var machineCoordinatesBoxMinZ = machineCoordinatesBoxMaxZ - grblParams.$132
       var machineCoordinatesBoxMinX = machineCoordinatesBoxMaxX - grblParams.$130
       var machineCoordinatesBoxMinY = machineCoordinatesBoxMaxY - grblParams.$131
       var machineCoordinatesBoxMinZ = machineCoordinatesBoxMaxZ - grblParams.$132
@@ -1363,12 +1072,7 @@ function drawMachineCoordinates(status) {
       console.log("X", machineCoordinatesBoxMinX, machineCoordinatesBoxMaxX)
       console.log("Y", machineCoordinatesBoxMinY, machineCoordinatesBoxMaxY)
       console.log("Z", machineCoordinatesBoxMinZ, machineCoordinatesBoxMaxZ)
-      console.log("X", machineCoordinatesBoxMinX, machineCoordinatesBoxMaxX)
-      console.log("Y", machineCoordinatesBoxMinY, machineCoordinatesBoxMaxY)
-      console.log("Z", machineCoordinatesBoxMinZ, machineCoordinatesBoxMaxZ)
 
-      workspace.remove(machineCoordinateSpace);
-      machineCoordinateSpace = new THREE.Group();
       workspace.remove(machineCoordinateSpace);
       machineCoordinateSpace = new THREE.Group();
 
@@ -1377,21 +1081,7 @@ function drawMachineCoordinates(status) {
         transparent: true,
         opacity: 0.3
       });
-      var material = new THREE.LineBasicMaterial({
-        color: 0x888888,
-        transparent: true,
-        opacity: 0.3
-      });
 
-      // Z min layer
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
       // Z min layer
       var points = [];
       points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
@@ -1411,22 +1101,7 @@ function drawMachineCoordinates(status) {
       points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
       var geometry = new THREE.BufferGeometry().setFromPoints(points);
       machineCoordinateSpace.add(new THREE.Line(geometry, material));
-      // Z max layer
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
-      // corner f/l
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
       // corner f/l
       var points = [];
       points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
@@ -1440,12 +1115,6 @@ function drawMachineCoordinates(status) {
       points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
       var geometry = new THREE.BufferGeometry().setFromPoints(points);
       machineCoordinateSpace.add(new THREE.Line(geometry, material));
-      // corner f/r
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
       // corner r/l
       var points = [];
@@ -1453,19 +1122,7 @@ function drawMachineCoordinates(status) {
       points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
       var geometry = new THREE.BufferGeometry().setFromPoints(points);
       machineCoordinateSpace.add(new THREE.Line(geometry, material));
-      // corner r/l
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
 
-      // corner r/r
-      var points = [];
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-      points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      machineCoordinateSpace.add(new THREE.Line(geometry, material));
       // corner r/r
       var points = [];
       points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
@@ -1591,8 +1248,7 @@ function drawMachineCoordinates(status) {
     }
 
     viewerMode = "3d";
-    $("#view2dtab").removeClass("active");
-    $("#view3dtab").addClass("active");
+    updateViewerModeTabs();
 
     if (coordinatePickMarker) {
       coordinatePickMarker.visible = false;
@@ -1815,4 +1471,68 @@ function jogToCoordinate(x, y) {
     isJob: false,
     fileName: ""
   });
+}
+
+function updateViewerTheme() {
+
+    var darkMode =
+        document.body.classList.contains("dark-mode");
+
+    var bgColor = darkMode
+        ? "rgba(30,30,30,.88)"
+        : "rgba(255,255,255,.88)";
+
+    var textColor = darkMode
+        ? "#ffffff"
+        : "#222222";
+
+    if (coordinateReadout) {
+        coordinateReadout.style.background = bgColor;
+        coordinateReadout.style.color = textColor;
+    }
+
+    if (depthLabel) {
+        depthLabel.style.background = bgColor;
+        depthLabel.style.color = textColor;
+    }
+}
+
+function updateCoordinateButtonTheme() {
+
+    var darkMode = document.body.classList.contains("dark-mode");
+
+    var buttonBg = darkMode ? "#2d2d2d" : "#ffffff";
+
+    var buttonText = darkMode ? "#ffffff" : "#222222";
+
+    var buttonBorder = darkMode ? "#666666" : "#666666";
+
+    [
+        coordinatePickButton,
+        coordinateJogButton,
+        coordinateCancelButton
+    ].forEach(function(btn) {
+
+        if (!btn) return;
+
+        btn.style.background = buttonBg;
+        btn.style.color = buttonText;
+        btn.style.borderColor = buttonBorder;
+    });
+}
+
+function onThemeChanged() {
+
+    updateViewerTheme();
+    updateCoordinateButtonTheme();
+
+    redrawGrid(
+        xmin,
+        xmax,
+        ymin,
+        ymax,
+        localStorage.getItem('unitsMode') === 'in'
+    );
+
+    performRender();
 }
