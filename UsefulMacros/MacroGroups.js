@@ -398,7 +398,6 @@ function OnMacrosChanged()
 			button.group = g_Groups[activeIdx];
 		}
 	}
-
 	RebuildGroupUI();
 	g_bInOnMacrosChanged = false;
 }

@@ -200,6 +200,16 @@ let ThemeData = {
       drawWorkspace(xmin, sizexmax, ymin, sizeymax);
       clearSceneFlag = true;
       pauseAnimation = false;
+
+      // Refresh whichever viewer mode is active
+      if (typeof refreshViewerSize === "function") {
+          refreshViewerSize();
+      }
+
+      if (typeof performRender === "function") {
+          performRender();
+      }
+
       if (themeId == "dark") {
         let theme = ThemeData.THEMES["light"];
         let newIcon = $('<i class="fas fa-fw fa-' + theme.ICON + '"></i>');
@@ -269,3 +279,14 @@ $(document).ready(function() {
   }
   ThemeData.init();
 });
+
+function refreshViewerTheme() {
+
+    refreshViewerSize();
+
+    updateViewerModeTabs();
+
+    if (typeof performRender === "function") {
+        performRender();
+    }
+}
