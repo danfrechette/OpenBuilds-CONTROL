@@ -1,12 +1,12 @@
 // Global Vars
-var scene = true;
+var scene = new THREE.Scene();
 var camera, renderer;
 var projector, mouseVector, containerWidth, containerHeight;
 var raycaster = new THREE.Raycaster();
 var gridsystem = new THREE.Group();
 
 var container, stats;
-var controls, control, gridsystem, helper;
+var controls, control, helper;
 var clock = new THREE.Clock();
 
 var marker;
@@ -56,7 +56,10 @@ var machineCoordinateSpace = false;
 
 var viewerMode = "3d";
 var saved3DView = null;
+
 var cameraXZ;
+var cameraXY;
+
 var depthLabel;
 
 function drawWorkspace(xmin, xmax, ymin, ymax) {
@@ -153,7 +156,7 @@ function drawWorkspace(xmin, xmax, ymin, ymax) {
     cone = new THREE.Mesh(coneGeo, new THREE.MeshLambertMaterial({
       color: 0x0000ff,
       specular: 0x0000ff,
-      shininess: 00
+      shininess: 0
     }));
 
     cone.overdraw = true;
@@ -182,7 +185,7 @@ function drawWorkspace(xmin, xmax, ymin, ymax) {
 }
 
 function redrawGrid(xmin, xmax, ymin, ymax, inches) {
-  // console.log(xmin, xmax, ymin, ymax, inches)
+
   if (inches) {
     xmin = Math.floor(xmin * 25.4);
     xmax = Math.ceil(xmax * 25.4);
@@ -194,7 +197,6 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
     ymin = Math.floor(ymin);
     ymax = Math.ceil(ymax);
   }
-  // console.log(xmin, xmax, ymin, ymax, inches)
 
   sizexmax = xmax;
   sizeymax = ymax;
@@ -230,6 +232,7 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
     color: Theme.X_RULER_LABEL_COLOR,
     size: size
   });
+
   var ylbl = this.makeSprite(this.scene, "webgl", {
     x: 0,
     y: parseInt(ymax) + offset,
@@ -238,7 +241,6 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
     color: Theme.Y_RULER_LABEL_COLOR,
     size: size
   });
-
 
   axesgrp.add(xlbl);
   axesgrp.add(ylbl);
@@ -268,10 +270,6 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   axesgrp.add(line1);
   axesgrp.add(line2);
 
-  // if (inches) {
-  //   axesgrp.scale.multiplyScalar(2.5);
-  // }
-
   grid.add(axesgrp);
 
   var step10 = 10;
@@ -280,6 +278,7 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
     step10 = 2.54;
     step100 = 25.4;
   }
+
   helper = new THREE.GridHelper(xmin, xmax, ymin, ymax, step10, Theme.GRID_STEP_10_COLOR);
   helper.position.y = 0;
   helper.position.x = 0;
@@ -289,6 +288,7 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   helper.receiveShadow = false;
   helper.name = "GridHelper10mm"
   grid.add(helper);
+
   helper = new THREE.GridHelper(xmin, xmax, ymin, ymax, step100, Theme.GRID_STEP_100_COLOR);
   helper.position.y = 0;
   helper.position.x = 0;
@@ -297,6 +297,7 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   helper.material.transparent = true;
   helper.receiveShadow = false;
   helper.name = "GridHelper50mm"
+
   grid.add(helper);
   grid.name = "Grid"
 
@@ -311,18 +312,18 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
 
 }
 
-function setBullseyePosition(x, y, z) {
-  //console.log('Set Position: ', x, y, z)
-  if (x) {
-    bullseye.position.x = parseInt(x, 10);
-  };
-  if (y) {
-    bullseye.position.y = parseInt(y, 10);
-  };
-  if (z) {
-    bullseye.position.z = (parseInt(z, 10) + 0.1);
-  };
-}
+// function setBullseyePosition(x, y, z) {
+//   //console.log('Set Position: ', x, y, z)
+//   if (x) {
+//     bullseye.position.x = parseInt(x, 10);
+//   };
+//   if (y) {
+//     bullseye.position.y = parseInt(y, 10);
+//   };
+//   if (z) {
+//     bullseye.position.z = (parseInt(z, 10) + 0.1);
+//   };
+// }
 
 function init3D() {
 
@@ -339,7 +340,7 @@ function init3D() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
     camera.position.z = 295;
-    //cameraXZ = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
+
     cameraXZ = new THREE.OrthographicCamera(-50, 50, 100, -100, 1, 1000);
     cameraXY = new THREE.OrthographicCamera(-100, 100, 100, -100, 1, 20000);
 
@@ -350,18 +351,25 @@ function init3D() {
     // ========================================================
     renderer.domElement.addEventListener('wheel', function(event) {
       if (viewerMode === "2d") {
-        // Stop the default browser scroll and background OrbitControls zooms
         event.preventDefault();
         event.stopPropagation();
 
-        // Determine zoom scale based on wheel spin direction
         var zoomDelta = event.deltaY > 0 ? 1.1 : 0.9;
         cameraXYZoomFactor *= zoomDelta;
-
-        // Apply clamping limits so the user can't zoom into infinity
         cameraXYZoomFactor = Math.max(0.05, Math.min(cameraXYZoomFactor, 25.0));
 
-        // Fire a render pass to visually apply the update instantly
+        if (typeof performRender === "function") {
+            performRender();
+        }
+      } else if (viewerMode === "3d") {
+        event.preventDefault();
+        event.stopPropagation();
+
+        var zoomDelta = event.deltaY > 0 ? 1.1 : 0.9;
+
+        camera.position.z *= zoomDelta;
+        camera.updateProjectionMatrix();
+
         if (typeof performRender === "function") {
             performRender();
         }
@@ -370,15 +378,13 @@ function init3D() {
     // ========================================================
 
     renderer.setClearColor(0xffffff, 1); // Background color of viewer = transparent
-    // renderer.setSize(window.innerWidth - 10, window.innerHeight - 10);
     renderer.clear();
 
     sceneWidth = document.getElementById("renderArea").offsetWidth,
-      sceneHeight = document.getElementById("renderArea").offsetHeight;
+    sceneHeight = document.getElementById("renderArea").offsetHeight;
     camera.aspect = sceneWidth / sceneHeight;
     renderer.setSize(sceneWidth, sceneHeight)
     camera.updateProjectionMatrix();
-
 
     if (!disable3Dcontrols) {
       controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -403,8 +409,6 @@ function init3D() {
     installSplitViewInputGuard();
     hideCoordinatePickerUI();
 
-
-    //drawWorkspace(xmin, xmax, ymin, ymax)
     drawWorkspace(xmin, xmax, ymin, ymax);
 
     // Picking stuff
@@ -434,11 +438,6 @@ function updateSplitCameraAspect(width, height) {
     var rightWidth = 140;
     var aspectZ = rightWidth / height;
 
-    if (cameraZ) {
-        cameraZ.aspect = aspectZ;
-        cameraZ.updateProjectionMatrix();
-    }
-
     // UPDATE THIS: Adjust orthographic bounds for cameraXY to prevent stretching
     if (cameraXY && cameraXY.isOrthographicCamera) {
         var leftWidth = width - rightWidth;
@@ -457,7 +456,7 @@ function updateSplitCameraAspect(width, height) {
 }
 
 function syncSplitCameras() {
-  if (!cameraXY || !cameraZ) return;
+  if (!cameraXY || !cameraXZ) return;
 
   var target = (!disable3Dcontrols && controls) ? controls.target : new THREE.Vector3(0, 0, 0);
 
@@ -498,22 +497,13 @@ function syncSplitCameras() {
   }
 
   var depthDistance = 1000;
-  cameraZ.position.set(depthTarget.x, 0 - depthDistance, depthTarget.z);
-  cameraZ.up.set(0, 0, 1);
-  cameraZ.lookAt(new THREE.Vector3(depthTarget.x, 0, depthTarget.z));
-
-  cameraZ.near = -2000;
-  cameraZ.far = 2000;
-
-  cameraZ.updateProjectionMatrix();
-  cameraZ.updateMatrixWorld();
 }
 
 
 function renderSplitView() {
   var width = renderer.domElement.clientWidth;
   var height = renderer.domElement.clientHeight;
-  
+
   var rightWidth = 140;
   var leftWidth = width - rightWidth;
 
@@ -527,7 +517,7 @@ function renderSplitView() {
 
   renderer.setViewport(leftWidth, 0, rightWidth, height);
   renderer.setScissor(leftWidth, 0, rightWidth, height);
-  renderer.render(scene, cameraZ);
+  // renderer.render(scene, cameraZ);
   renderer.setScissorTest(false);
 }
 
@@ -778,7 +768,7 @@ function onCoordinateGridClick(event) {
       console.log("No mode selected");
       break;
   }
-  
+
   disableCoordinatePick();
 
   if (typeof performRender === "function") {
@@ -787,11 +777,11 @@ function onCoordinateGridClick(event) {
 }
 
 function cancelCoordinateMode() {
-  coordinateMode = null;   
+  coordinateMode = null;
   if (coordinatePickMarker) {
     coordinatePickMarker.visible = false;
   }
-  
+
   if (!disable3Dcontrols && controls) {
       controls.enabled = true;
   }
@@ -836,8 +826,12 @@ function animate() {
     toolAnimate();
 
     if (clearSceneFlag) {
-      while (scene.children.length > 1) {
-        scene.remove(scene.children[1])
+
+      for (let i = scene.children.length - 1; i >= 0; i--) {
+          const child = scene.children[i];
+          if (child.name !== "Workspace") {
+              scene.remove(child);
+          }
       }
 
       if (object) scene.add(object)
@@ -846,9 +840,7 @@ function animate() {
       clearSceneFlag = false;
     }
 
-    animationLoopTimeout = setTimeout(function() {
-      requestAnimationFrame(animate);
-    }, 60);
+    animationLoopTimeout = requestAnimationFrame(animate);
 
     //renderer.render(scene, camera);
     performRender();
@@ -857,9 +849,6 @@ function animate() {
 
 function viewExtents(objecttosee) {
   if (!disable3Dcontrols) {
-    // console.log("viewExtents. object:", objecttosee);
-    // console.log("controls:", controls);
-    //wakeAnimate();
 
     // lets override the bounding box with a newly
     // generated one
@@ -876,7 +865,6 @@ function viewExtents(objecttosee) {
       var maxy = box3.max.y;
       var minz = box3.min.z;
       var maxz = box3.max.z;
-
 
       controls.reset();
 
@@ -939,24 +927,23 @@ function viewExtents(objecttosee) {
 
 function makeSprite(scene, rendererType, vals) {
   var canvas = document.createElement('canvas'),
-    context = canvas.getContext('2d'),
-    metrics = null,
-    textHeight = 100,
-    textWidth = 0,
-    actualFontSize = 10;
+      context = canvas.getContext('2d'),
+      metrics = null,
+      textHeight = 100,
+      textWidth = 0,
+      actualFontSize = 10;
   var txt = vals.text;
   if (vals.size) actualFontSize = vals.size;
 
-  context.font = "normal " + textHeight + "px Impact";
+  // context.font = "normal " + textHeight + "px Impact";
   metrics = context.measureText(txt);
   var textWidth = metrics.width;
 
   canvas.width = textWidth;
   canvas.height = textHeight;
-  context.font = "normal " + textHeight + "px Impact";
+  // context.font = "normal " + textHeight + "px Impact";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  //context.fillStyle = "#ff0000";
   context.fillStyle = vals.color;
 
   context.fillText(txt, textWidth / 2, textHeight / 2);
@@ -967,12 +954,10 @@ function makeSprite(scene, rendererType, vals) {
 
   var material = new THREE.SpriteMaterial({
     map: texture,
-    // useScreenCoordinates: false,
     transparent: true,
     opacity: Theme.SPRITE_OPACITY
   });
   material.transparent = true;
-  //var textObject = new THREE.Sprite(material);
   var textObject = new THREE.Object3D();
   textObject.position.x = vals.x;
   textObject.position.y = vals.y;
@@ -1035,27 +1020,19 @@ $(window).on('resize', function() {
   console.log("Window Resize")
   fixRenderSize();
 });
-
 function resetView(object) {
-  // console.log(resetView.caller);
-  if (!object) {
-    if (objectsInScene.length > 0) {
-      var insceneGrp = new THREE.Group()
-      for (i = 0; i < objectsInScene.length; i++) {
-        var object = objectsInScene[i].clone();
-        insceneGrp.add(object)
-      }
-      // scene.add(insceneGrp)
-      viewExtents(insceneGrp);
-      // scene.remove(insceneGrp)
-    } else {
-      viewExtents(helper);
+    let targetObject = object;
+
+    if (!targetObject) {
+        if (objectsInScene.length > 0) {
+            targetObject = new THREE.Group();
+            objectsInScene.forEach(obj => targetObject.add(obj));
+        } else {
+            targetObject = helper; // fallback grid
+        }
     }
-  } else {
-    if (object.userData.linePoints.length > 1) {
-      viewExtents(object);
-    }
-  }
+
+    viewExtents(targetObject);
 }
 
 function drawMachineCoordinates(status) {
@@ -1225,7 +1202,7 @@ function drawMachineCoordinates(status) {
 
       showCoordinatePickerUI();
       refreshViewerSize();
-      
+
   }
 
   function save3DView() {
