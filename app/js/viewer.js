@@ -12,6 +12,7 @@ var sizeymin;
 var sizexmax;
 var sizeymax;
 var clearSceneFlag = false;
+var viewSettings = {grid: true, ruler: true, toolpath: true, tool: true, machine: true};
 
 var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
 
@@ -21,12 +22,12 @@ var pauseAnimation = false;
 var workspace = new THREE.Group();
 workspace.name = "Workspace"
 
+var machineCoordinateSpace;
+
 const defaultXmin = 0,
   defaultXmax = 307,
   defaultYmin = 0,
   defaultYmax = 207
-
-var machineCoordinateSpace = false;
 
 function disposeGeometry(obj) {
   if (obj.geometry) obj.geometry.dispose();
@@ -47,6 +48,8 @@ function disposeGeometryAndRemove(obj) {
 }
 
 function cleanupWorkspace() {
+  simstop();
+
   var obj = workspace.getObjectByName("Scene Lights");
   if (obj) disposeGeometryAndRemove(obj);
 
@@ -57,6 +60,9 @@ function cleanupWorkspace() {
   if (obj) disposeGeometryAndRemove(obj);
 
   obj = workspace.getObjectByName("Grid System");
+  if (obj) disposeGeometryAndRemove(obj);
+
+  obj = workspace.getObjectByName("Machine Extents");
   if (obj) disposeGeometryAndRemove(obj);
 }
 
@@ -161,11 +167,11 @@ function drawWorkspace(xmin, xmax, ymin, ymax) {
     cone.material.opacity = 0.6;
     cone.material.transparent = true;
     cone.castShadow = false;
-    cone.visible = true;
+    cone.visible = viewSettings.tool;
     cone.name = "Simulation Marker"
     workspace.add(cone)
-
   }
+
   gridsystem.name = "Grid System"
   workspace.add(gridsystem)
   if (localStorage.getItem('unitsMode')) {
@@ -175,6 +181,36 @@ function drawWorkspace(xmin, xmax, ymin, ymax) {
       redrawGrid(xmin, xmax, ymin, ymax, false);
     }
   }
+
+  var machineBoxVerts = [ // unit cube
+    0, 0, 0, 0, 0, 1,
+    0, 0, 1, 0, 1, 1,
+    0, 1, 1, 0, 1, 0,
+    0, 1, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0,
+    0, 0, 1, 1, 0, 1,
+    0, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 1, 0,
+    1, 0, 0, 1, 0, 1,
+    1, 0, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 0,
+    1, 1, 0, 1, 0, 0,
+  ];
+
+  var machineBoxMaterial = new THREE.LineBasicMaterial({
+    color: 0x888888,
+    transparent: true,
+    opacity: 0.3
+  });
+  var machineBoxGeo = new THREE.BufferGeometry();
+  machineBoxGeo.setAttribute('position', new THREE.Float32BufferAttribute( machineBoxVerts, 3));
+  machineCoordinateSpace = new THREE.LineSegments(machineBoxGeo, machineBoxMaterial);
+  machineCoordinateSpace.name = "Machine Extents";
+  machineCoordinateSpace.visible = viewSettings.machine;
+  machineCoordinateSpace.material.visible = false; // make the material invisible until the box size is computed
+  workspace.add(machineCoordinateSpace);
+  updateMachineCoordinates();
+
   scene.add(workspace)
 }
 
@@ -206,9 +242,6 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   while (gridsystem.children.length > 0) {
     disposeGeometryAndRemove(gridsystem.children[0]);
   }
-
-  var grid = new THREE.Group();
-  grid.name = "Grid";
 
   var axesgrp = new THREE.Object3D();
   axesgrp.name = "Axes Markers"
@@ -263,13 +296,13 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   axesgrp.add(line1);
   axesgrp.add(line2);
 
-  grid.add(axesgrp);
+  gridsystem.add(axesgrp);
 
   var vertices10 = [];
   var vertices100 = [];
 
-  var scale = inches ? 25.4/4 : 10;
-  var major = inches ? 4 : 10;
+  var scale = inches ? 25.4/5 : 10;
+  var major = inches ? 5 : 10;
   var ixmin = Math.ceil(xmin / scale);
   var ixmax = Math.floor(xmax / scale);
   var iymin = Math.ceil(ymin / scale);
@@ -305,7 +338,6 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   var grid10 = new THREE.LineSegments(geometry10, material10);
   grid10.receiveShadow = false;
   grid10.name = "GridHelper10";
-  grid.add(grid10);
 
   var material100 = new THREE.LineBasicMaterial({
     color: Theme.GRID_STEP_100_COLOR,
@@ -319,28 +351,18 @@ function redrawGrid(xmin, xmax, ymin, ymax, inches) {
   var grid100 = new THREE.LineSegments(geometry100, material100);
   grid100.receiveShadow = false;
   grid100.name = "GridHelper100";
+
+  var grid = new THREE.Group();
+  grid.name = "Grid";
+  grid.visible = viewSettings.grid;
+  grid.add(grid10);
   grid.add(grid100);
-
-  if (inches) {
-    var ruler = drawRulerInches(xmin, xmax, ymin, ymax, inches)
-  } else {
-    var ruler = drawRuler(xmin, xmax, ymin, ymax, inches)
-  }
   gridsystem.add(grid);
-  gridsystem.add(ruler);
-}
 
-function setBullseyePosition(x, y, z) {
-  //console.log('Set Position: ', x, y, z)
-  if (x) {
-    bullseye.position.x = parseInt(x, 10);
-  };
-  if (y) {
-    bullseye.position.y = parseInt(y, 10);
-  };
-  if (z) {
-    bullseye.position.z = (parseInt(z, 10) + 0.1);
-  };
+  var ruler = drawRuler(xmin, xmax, ymin, ymax, inches)
+  ruler.name = "Ruler";
+  ruler.visible = viewSettings.ruler;
+  gridsystem.add(ruler);
 }
 
 function init3D() {
@@ -358,6 +380,7 @@ function init3D() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 20000);
     camera.position.z = 295;
+    camera.up = new THREE.Vector3(0, 0, 1);
 
     $('#renderArea').append(renderer.domElement);
     renderer.setClearColor(0xffffff, 1); // Background color of viewer = transparent
@@ -389,6 +412,8 @@ function init3D() {
     }
 
     drawWorkspace(defaultXmin, defaultXmax, defaultYmin, defaultYmax);
+
+    readViewSettings();
 
     setTimeout(function() {
       resetView()
@@ -434,85 +459,49 @@ function animate() {
 }
 
 function viewExtents(objecttosee) {
-  if (!disable3Dcontrols) {
-    // console.log("viewExtents. object:", objecttosee);
-    // console.log("controls:", controls);
+  // console.log("viewExtents. object:", objecttosee);
+  // console.log("controls:", controls);
 
-    // lets override the bounding box with a newly
-    // generated one
-    // get its bounding box
-    if (objecttosee) {
-      // console.log(objecttosee)
-      var helper = new THREE.BoxHelper(objecttosee);
-      helper.update();
-      var box3 = new THREE.Box3();
-      box3.setFromObject(helper);
-      var minx = box3.min.x;
-      var miny = box3.min.y;
-      var maxx = box3.max.x;
-      var maxy = box3.max.y;
-      var minz = box3.min.z;
-      var maxz = box3.max.z;
+  // lets override the bounding box with a newly
+  // generated one
+  // get its bounding box
+  if (objecttosee) {
+    // console.log(objecttosee)
+    var helper = new THREE.BoxHelper(objecttosee);
+    helper.update();
+    var box3 = new THREE.Box3();
+    box3.setFromObject(helper);
+    var minx = box3.min.x;
+    var miny = box3.min.y;
+    var maxx = box3.max.x;
+    var maxy = box3.max.y;
+    var minz = box3.min.z;
+    var maxz = box3.max.z;
 
+    var lenx = maxx - minx;
+    var leny = maxy - miny;
+    var lenz = maxz - minz;
+    var centerx = minx + (lenx / 2);
+    var centery = miny + (leny / 2);
+    var centerz = minz + (lenz / 2);
 
-      controls.reset();
+    // console.log("lenx:", lenx, "leny:", leny, "lenz:", lenz);
+    var maxlen = Math.max(lenx, leny, lenz);
+    var target = new THREE.Vector3(centerx, centery, centerz);
 
-      var lenx = maxx - minx;
-      var leny = maxy - miny;
-      var lenz = maxz - minz;
-      var centerx = minx + (lenx / 2);
-      var centery = miny + (leny / 2);
-      var centerz = minz + (lenz / 2);
+    // place the camera above the center, at twice the maxlen, looking straight down
+    camera.position.set(centerx, centery, centerz + 2 * maxlen);
+    camera.fov = 30; // degrees
+    camera.lookAt(target);
+    camera.rotation.set(0, 0, 0);
+    camera.updateProjectionMatrix();
 
-      // console.log("lenx:", lenx, "leny:", leny, "lenz:", lenz);
-      var maxlen = Math.max(lenx, leny, lenz);
-      var dist = 2 * maxlen;
-      // center camera on gcode objects center pos, but twice the maxlen
-      controls.object.position.x = centerx;
-      controls.object.position.y = centery;
-      controls.object.position.z = centerz + dist;
-      controls.target.x = centerx;
-      controls.target.y = centery;
-      controls.target.z = centerz;
-      // console.log("maxlen:", maxlen, "dist:", dist);
-      var fov = 2.2 * Math.atan(maxlen / (2 * dist)) * (180 / Math.PI);
-      // console.log("new fov:", fov, " old fov:", controls.object.fov);
-      if (isNaN(fov)) {
-        // console.log("giving up on viewing extents because fov could not be calculated");
-        return;
-      } else {
-        // console.log("fov: ", fov);
-        controls.object.fov = fov;
-        var L = dist;
-        var camera2 = controls.object;
-        var vector = controls.target.clone();
-        var l = (new THREE.Vector3()).subVectors(camera2.position, vector).length();
-        var up = camera.up.clone();
-        var quaternion = new THREE.Quaternion();
-
-        // Zoom correction
-        camera2.translateZ(L - l);
-        // console.log("up:", up);
-        up.y = 1;
-        up.x = 0;
-        up.z = 0;
-        quaternion.setFromAxisAngle(up, 0);
-        camera2.position.applyQuaternion(quaternion);
-        up.y = 0;
-        up.x = 1;
-        up.z = 0;
-        quaternion.setFromAxisAngle(up, 0);
-        camera2.position.applyQuaternion(quaternion);
-        up.y = 0;
-        up.x = 0;
-        up.z = 1;
-        quaternion.setFromAxisAngle(up, 0);
-        camera2.lookAt(vector);
-        controls.object.updateProjectionMatrix();
-      }
+    if (!disable3Dcontrols) {
+      controls.target = target;
+      controls.update();
     }
   }
-};
+}
 
 function makeSprite(rendererType, vals) {
   var canvas = document.createElement('canvas'),
@@ -605,85 +594,80 @@ function resetView(object) {
   }
 }
 
-function clearMachineCoordinates() {
-  if (machineCoordinateSpace)
-    disposeGeometryAndRemove(machineCoordinateSpace);
-  machineCoordinateSpace = false;
+function updateMachineCoordinates() {
+  const limits = computeMachineLimits(0);
+  const sizeX = limits.maxX - limits.minX;
+  const sizeY = limits.maxY - limits.minY;
+  const sizeZ = limits.maxZ - limits.minZ;
+
+  if (laststatus == undefined || sizeX <= 0 || sizeY <= 0 || sizeZ <= 0) {
+    // if the box is invalid, just make it default size and hide the material
+    machineCoordinateSpace.position.set(0, 0, 0);
+    machineCoordinateSpace.scale.set(1, 1, 1);
+    machineCoordinateSpace.material.visible = false;
+  } else {
+    machineCoordinateSpace.position.set(
+      limits.minX - laststatus.machine.position.offset.x,
+      limits.minY - laststatus.machine.position.offset.y,
+      limits.minZ - laststatus.machine.position.offset.z);
+    machineCoordinateSpace.scale.set(sizeX, sizeY, sizeZ);
+    machineCoordinateSpace.material.visible = true;
+  }
 }
 
-function drawMachineCoordinates(status) {
+function readViewSettings() {
+/* decided to make the settings non-persistent
+  if (localStorage.getItem('viewSettings')) {
+    var settings = JSON.parse(localStorage.getItem('viewSettings'));
+    if (settings != undefined) {
+      for (var prop in settings) {
+        if (prop in viewSettings && typeof(settings[prop]) == typeof(viewSettings[prop]))
+          viewSettings[prop] = settings[prop];
+      }
+    }
+  }
+*/
+  $('#viewGridSetting:checkbox').prop('checked', viewSettings.grid);
+  $('#viewRulerSetting:checkbox').prop('checked', viewSettings.ruler);
+  $('#viewToolpathSetting:checkbox').prop('checked', viewSettings.toolpath);
+  $('#viewToolSetting:checkbox').prop('checked', viewSettings.tool);
+  $('#viewMachineSetting:checkbox').prop('checked', viewSettings.machine);
 
-  if (status != undefined && grblParams.$130 !== undefined && grblParams.$131 !== undefined && grblParams.$132 !== undefined) {
-    const limits = computeMachineLimits(grblParams, status.machine.firmware.features, 0);
-    var machineCoordinatesBoxMinX = limits.minX - status.machine.position.offset.x;
-    var machineCoordinatesBoxMinY = limits.minY - status.machine.position.offset.y;
-    var machineCoordinatesBoxMinZ = limits.minZ - status.machine.position.offset.z;
-    var machineCoordinatesBoxMaxX = limits.maxX - status.machine.position.offset.x;
-    var machineCoordinatesBoxMaxY = limits.maxY - status.machine.position.offset.y;
-    var machineCoordinatesBoxMaxZ = limits.maxZ - status.machine.position.offset.z;
+  updateViewSettings();
+}
 
-    console.log("X", machineCoordinatesBoxMinX, machineCoordinatesBoxMaxX)
-    console.log("Y", machineCoordinatesBoxMinY, machineCoordinatesBoxMaxY)
-    console.log("Z", machineCoordinatesBoxMinZ, machineCoordinatesBoxMaxZ)
+function saveViewSettings() {
+/* decided to make the settings non-persistent
+  localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
+*/
+}
 
-    clearMachineCoordinates();
-    machineCoordinateSpace = new THREE.Group();
-    machineCoordinateSpace.name = "Machine Extents";
+function changeViewSettings() {
+  viewSettings.grid = $('#viewGridSetting').is(':checked');
+  viewSettings.ruler = $('#viewRulerSetting').is(':checked');
+  viewSettings.toolpath = $('#viewToolpathSetting').is(':checked');
+  viewSettings.tool = $('#viewToolSetting').is(':checked');
+  viewSettings.machine = $('#viewMachineSetting').is(':checked');
+  saveViewSettings();
+  updateViewSettings();
+}
 
-    var material = new THREE.LineBasicMaterial({
-      color: 0x888888,
-      transparent: true,
-      opacity: 0.3
-    });
+function updateViewSettings() {
+  if (scene) {
+    if (object)
+      object.visible = viewSettings.toolpath;
+    if (cone)
+      cone.visible = viewSettings.tool;
 
-    // Z min layer
-    var points = [];
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-    var geometry = new THREE.BufferGeometry().setFromPoints(points);
-    machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    var grid = scene.getObjectByName("Grid");
+    if (grid)
+      grid.visible = viewSettings.grid;
 
-    // Z max layer
-    var points = [];
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-    var geometry = new THREE.BufferGeometry().setFromPoints(points);
-    machineCoordinateSpace.add(new THREE.Line(geometry, material));
+    var ruler = scene.getObjectByName("Ruler");
+    if (ruler)
+      ruler.visible = viewSettings.ruler;
 
-    // corner f/l
-    var points = [];
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-    var geometry = new THREE.BufferGeometry().setFromPoints(points);
-    machineCoordinateSpace.add(new THREE.Line(geometry, material));
-
-    // corner f/r
-    var points = [];
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMinX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-    var geometry = new THREE.BufferGeometry().setFromPoints(points);
-    machineCoordinateSpace.add(new THREE.Line(geometry, material));
-
-    // corner r/l
-    var points = [];
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMinY, machineCoordinatesBoxMaxZ));
-    var geometry = new THREE.BufferGeometry().setFromPoints(points);
-    machineCoordinateSpace.add(new THREE.Line(geometry, material));
-
-    // corner r/r
-    var points = [];
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMinZ));
-    points.push(new THREE.Vector3(machineCoordinatesBoxMaxX, machineCoordinatesBoxMaxY, machineCoordinatesBoxMaxZ));
-    var geometry = new THREE.BufferGeometry().setFromPoints(points);
-    machineCoordinateSpace.add(new THREE.Line(geometry, material));
-
-    workspace.add(machineCoordinateSpace);
+    if (machineCoordinateSpace)
+      machineCoordinateSpace.visible = viewSettings.machine;
   }
 }

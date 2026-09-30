@@ -1,0 +1,148 @@
+My plan is to build a laser-leveling table mounted beneath my laser cutter. The system will use a 
+BLTouch sensor to measure the orientation of the table's Z-plane and detect any unevenness.
+
+Independent stepper motors will be used to fine-tune the orientation of the workpiece, 
+allowing the surface to be automatically leveled before operation.
+
+I would also like the system to detect stepper motor stalls, both to improve the leveling 
+process and to help protect the machine bed from potential damage.
+
+The controller board will serve as the central processing unit for the system, managing the stepper 
+motors and auxiliary devices such as lighting, cooling fans, and up to four USB-A ports.
+
+The power supply should support both 12V and 24V operating modes, selectable via DIP switches. This voltage selection should apply independently to the stepper motor drivers and each USB-A port 5-24 Volts to provide greater flexibility for connected devices.
+
+An OLED display will provide system status information, configuration details, and user-facing messages.
+
+At this time, there are no plans for the leveling system to interface directly with the laser cutter itself. The system is intended to operate as a standalone platform responsible solely for bed leveling, workpiece alignment, and auxiliary device control.
+
+Lastly, additional ports should be included to add Limit switches if needed.
+
+
+
+For this project I would like to create a board which have the following features but is not an inclusive list:
+
+5 Volt circuit:
+
+1 x Processor will be a Esp32 30 Pin with WIFI module runs at 3.0 to 3.6 volts
+1 x 0.96' I2C IIC 12864 128X64 Pixel OLED LCD Display Shield Board Module 4 Pin
+1 x Connector for a Creality BL Touch
+4 x Motor Contols using TMC2209 V1.3 Stepper Motor Driver for 12 or 24 volts 
+1 x connector to reset Esp32.
+1 x buck converter / circuit to take 12/24 volt to supply power for esp32 and 5v components.
+
+
+24 Volt Circuit:
+
+4 x Usb A ports controled by with a relay circuit if possible have a 12v and 24 volt jumper for each port.
+4 x connectors for stepper motors.
+1 x connector to turn power on and off
+
+
+
+
+
+Laser Leveling Table Controller Project
+Project Overview
+
+The goal of this project is to develop a standalone laser-leveling table that mounts beneath an existing laser cutter. The system will utilize a BLTouch probe to measure the orientation of the table's Z-plane and identify any unevenness across the work surface.
+
+Independent stepper motors will automatically adjust the position of the workpiece, allowing the table to be leveled prior to operation. This capability is intended to improve cutting consistency and compensate for variations in material thickness or table alignment.
+
+To enhance reliability and protect the equipment, the system should also be capable of detecting stepper motor stalls. Stall detection will be used during the leveling process and as a safeguard against mechanical obstructions or bed damage.
+
+The controller board will function as the central processing unit for the entire system, managing the leveling mechanism as well as auxiliary devices such as lighting, cooling fans, and powered USB accessories.
+
+The design should support operation from either a 12V or 24V power source. Voltage selection should be configurable through onboard DIP switches or jumpers. USB-powered devices should also support configurable output voltages ranging from 5V to 24V, providing flexibility for a variety of accessories.
+
+An OLED display will provide status information, configuration menus, leveling feedback, error messages, and system diagnostics.
+
+The system is intended to operate independently and will not directly interface with the laser cutter's motion controller, firmware, or control electronics. Its sole purpose is bed leveling, workpiece alignment, and auxiliary device control.
+
+To allow future expansion, additional I/O ports should be included for optional limit switches and other accessories.
+
+Desired Features
+
+The following list represents the desired capabilities of the controller board but should not be considered all-inclusive.
+
+Low Voltage Control Circuit (3.3V / 5V)
+Main Controller
+1 × ESP32 (30-pin module with integrated Wi-Fi)
+Operating Voltage: 3.0V to 3.6V
+Responsible for system control, user interface, sensor monitoring, and communications
+Display
+1 × 0.96" I2C OLED Display
+Resolution: 128 × 64 pixels
+Four-pin interface (VCC, GND, SDA, SCL)
+Sensors
+1 × BLTouch-compatible connector
+Used for bed probing and leveling measurements
+Stepper Motor Drivers
+4 × TMC2209 V1.3 Stepper Motor Drivers
+Operate from either 12V or 24V supply
+UART communication support preferred
+StallGuard functionality available for stall detection and sensorless homing
+User Controls
+1 × ESP32 Reset Button
+1 × System Reset/Header Connector
+Optional configuration buttons for:
+Menu navigation
+Calibration
+Auto-leveling
+Emergency stop
+Power Conversion
+1 × High-efficiency buck converter
+Input: 12V to 24V
+Output:
+5V rail
+3.3V rail for ESP32
+Sized appropriately for all low-voltage devices
+Power and Motion Circuit (12V / 24V)
+Stepper Outputs
+4 × Stepper Motor Connectors
+Independent control of each leveling motor
+Support NEMA 17 and similar motors
+USB Auxiliary Power Outputs
+4 × USB-A Ports
+Individually switchable
+Relay or MOSFET controlled
+User-selectable voltage configuration
+Supports:
+5V
+12V
+24V
+Independent jumper or DIP switch selection per port preferred
+Auxiliary Outputs
+Lighting Output
+Cooling Fan Output
+Expansion outputs for future accessories
+Power Control
+1 × Main Power Connector
+1 × System Power Switch
+Reverse polarity protection
+Over-current protection
+Fuse protection on all major power circuits
+Expansion and Future Features
+
+The board should provide reserved expansion headers for future enhancements, including:
+
+Limit switch inputs
+Additional sensors
+External emergency stop input
+Serial communication headers
+I2C expansion devices
+Additional relay outputs
+Temperature monitoring
+Remote monitoring through Wi-Fi
+Web-based configuration interface
+Design Objectives
+Automatic work-surface leveling using a BLTouch probe.
+Independent control of four leveling motors.
+Stepper stall detection for protection and diagnostics.
+Support for both 12V and 24V operating environments.
+Flexible auxiliary power outputs through USB-A connections.
+User-friendly operation through an OLED display and onboard controls.
+Standalone operation independent of the laser cutter controller.
+Expandability for future accessories and automation features.
+Reliable and protected power distribution for all connected devices.
+Compact PCB design suitable for mounting beneath a laser cutter table.

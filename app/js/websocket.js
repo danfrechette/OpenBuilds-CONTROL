@@ -354,8 +354,9 @@ function initSocket() {
 
     // With jobCompletedMsg Message
     if (data.jobCompletedMsg && data.jobCompletedMsg.length > 0) {
+      var runTime = undefined;
       if (data.jobStartTime && data.jobEndTime) {
-        var runTime = data.jobEndTime - data.jobStartTime;
+        runTime = data.jobEndTime - data.jobStartTime;
         $("#completeMsgDiv").html("Job completed in " + msToTime(runTime) + "<hr>" + data.jobCompletedMsg);
         $('#timeRemaining').html("DONE: " + msToTime(runTime));
       } else {
@@ -365,7 +366,7 @@ function initSocket() {
       Metro.dialog.open("#completeMsgModal");
       var icon = ''
       var source = "JOB COMPLETE"
-      var string = "Job completed in " + msToTime(runTime) + " / " + data.jobCompletedMsg
+      var string = (runTime != undefined ? "Job completed in " + msToTime(runTime) : "Job completed") + " / " + data.jobCompletedMsg
       var printLogCls = "fg-darkGreen"
       printLogModern(icon, source, string, printLogCls)
       $('#timeRemaining').html("DONE: " + msToTime(runTime));
@@ -602,7 +603,6 @@ function initSocket() {
   socket.on('status', function(status) {
 
     if (nostatusyet) {
-      // $('#windowtitle').html("OpenBuilds CONTROL v" + status.driver.version)
       setWindowTitle(status)
       if (status.driver.operatingsystem == "rpi") {
         $('#windowtitlebar').hide();
@@ -610,14 +610,13 @@ function initSocket() {
     }
     nostatusyet = false;
 
-    // if (!_.isEqual(status, laststatus)) {
+    var featuresChanged = false;
+    var offsetChanged = false;
+
     if (laststatus !== undefined) {
 
-      if (!isJogWidget) {
-        if (!_.isEqual(status.machine.position.offset, laststatus.machine.position.offset) || machineCoordinateSpace == false) {
-          drawMachineCoordinates(status);
-        }
-      }
+      featuresChanged = !_.isEqual(status.machine.firmware.features, laststatus.machine.firmware.features);
+      offsetChanged = !_.isEqual(status.machine.position.offset, laststatus.machine.position.offset);
 
       if (!_.isEqual(status.comms.interfaces.ports, laststatus.comms.interfaces.ports)) {
         var string = "Detected a change in available ports: ";
@@ -630,7 +629,6 @@ function initSocket() {
         }
         var icon = ''
         var source = "usb ports"
-        //var string = string
         var printLogCls = "fg-dark"
         printLogModern(icon, source, string, printLogCls)
         laststatus.comms.interfaces.ports = status.comms.interfaces.ports;
@@ -919,13 +917,24 @@ function initSocket() {
 
     // Enable or disable 4th axis UI elements
     if (status.machine.has4thAxis) {
-      $(".4thaxis-active").show();
+      $('#disable4thAxisTick').show();
+      if (disable4thAxis)
+        $(".4thaxis-active").hide();
+      else
+        $(".4thaxis-active").show();
     } else {
+      $('#disable4thAxisTick').hide();
       $(".4thaxis-active").hide();
     }
 
 
     laststatus = status;
+
+    if (!isJogWidget && (featuresChanged || offsetChanged))
+      updateMachineCoordinates();
+    if (featuresChanged)
+        updateGotoLimits();
+
     waitingForStatus = false;
   });
 
@@ -1002,9 +1011,6 @@ function initSocket() {
           break;
       }
     }
-    if (!isJogWidget)
-      clearMachineCoordinates();
-    updateGotoLimits(data);
   })
 
   socket.on("interfaceOutdated", function(status) {
